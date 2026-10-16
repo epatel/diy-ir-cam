@@ -1,0 +1,459 @@
+<title>IR Cam Screen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;600;750&family=Martian+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: the upright board on the left like it sits in your hand, controls and the firmware's layout notes beside it; stacks on phones */
+:root {
+  --bg: #eef0ee;
+  --fg: #1b1f1d;
+  --muted: #5d6762;
+  --line: #cfd5d1;
+  --panel: #ffffff;
+  --accent: #d2561c;       /* hot-end orange from the ironbow palette */
+  --hot: #0a9aa8;          /* the firmware's cyan hot-spot marker, darkened for light paper */
+  --pcb: #14171a;          /* the board itself, same in both themes */
+  --pcb-edge: #2a2f33;
+  --font-display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --font-data: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121514; --fg: #e5e9e6; --muted: #98a39d; --line: #2b322e; --panel: #1a1f1d;
+    --accent: #f07a3c; --hot: #3fd6e3; --pcb-edge: #3a4146; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121514; --fg: #e5e9e6; --muted: #98a39d; --line: #2b322e; --panel: #1a1f1d;
+  --accent: #f07a3c; --hot: #3fd6e3; --pcb-edge: #3a4146; color-scheme: dark;
+}
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.5;
+}
+.wrap {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding-block: 32px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  display: grid;
+  gap: 28px;
+}
+header { display: grid; gap: 6px; }
+.eyebrow {
+  font-family: var(--font-data);
+  font-size: 11px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+h1 {
+  font-family: var(--font-display);
+  font-weight: 750;
+  font-size: clamp(26px, 4vw, 38px);
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.lede { margin: 0; color: var(--muted); max-width: 65ch; }
+
+.stage {
+  display: grid;
+  grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+  gap: 40px;
+  align-items: start;
+}
+@media (max-width: 760px) { .stage { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---- Device ---- */
+.bench { display: grid; justify-items: center; gap: 14px; }
+.board {
+  position: relative;
+  width: 100%;
+  max-width: 380px;
+  background: var(--pcb);
+  border: 1px solid var(--pcb-edge);
+  border-radius: 18px;
+  padding: 7% 7% 16%;
+  box-shadow: 0 18px 40px -22px rgba(0,0,0,.55);
+}
+.board::after {               /* USB-C port on the bottom edge */
+  content: "";
+  position: absolute;
+  bottom: -6px; left: 50%;
+  width: 26%; height: 12px;
+  transform: translateX(-50%);
+  background: #8d969c;
+  border-radius: 4px;
+}
+.lcd {
+  aspect-ratio: 172 / 320;
+  width: 100%;
+  max-width: 100%;
+  border-radius: 8.4% / 4.5%;  /* the 1.47" panel has rounded corners */
+  overflow: hidden;
+  background: #000;
+  box-shadow: inset 0 0 0 2px #050607;
+}
+.lcd canvas { display: block; width: 100%; height: 100%; image-rendering: pixelated; }
+.boot {
+  position: absolute;
+  left: 9%; bottom: 4.5%;
+  font: 500 10px var(--font-data);
+  letter-spacing: .06em;
+  color: #c9ced1;
+  background: #2b3136;
+  border: 1px solid #4a5258;
+  border-radius: 6px;
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.boot:active { transform: translateY(1px); background: #384046; }
+.boot[aria-pressed="true"] { color: #ff6b5e; border-color: #ff6b5e; }
+.silk {
+  position: absolute;
+  right: 9%; bottom: 5.5%;
+  font-family: var(--font-data);
+  font-size: 10px;
+  color: #c9ced1;
+  opacity: .65;
+  letter-spacing: .06em;
+}
+.caption { font-family: var(--font-data); font-size: 12px; color: var(--muted); text-align: center; max-width: 380px; }
+
+/* ---- Side column ---- */
+.side { display: grid; gap: 28px; min-width: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: 12px 22px; align-items: center; }
+.seg {
+  display: inline-flex;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px;
+  background: var(--panel);
+}
+.seg button {
+  font: 600 13px var(--font-body);
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  padding: 7px 14px;
+  cursor: pointer;
+}
+.seg button[aria-pressed="true"] { background: var(--fg); color: var(--bg); }
+.seg button:focus-visible, .boot:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.toggle { display: inline-flex; gap: 8px; align-items: center; font-size: 13px; color: var(--muted); cursor: pointer; }
+.toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+
+h2 { font-family: var(--font-display); font-size: 18px; font-weight: 650; margin: 0 0 10px; }
+.map-row { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 24px; align-items: start; }
+@media (max-width: 460px) { .map-row { grid-template-columns: minmax(0, 1fr); } .map { max-width: 150px; } }
+.map { width: 100%; height: auto; display: block; }
+.map text { font-family: var(--font-data); font-size: 8.5px; fill: var(--fg); }
+.map .dim { fill: var(--muted); }
+table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+td { padding: 7px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+td:first-child { color: var(--muted); padding-right: 14px; white-space: nowrap; }
+td:last-child { font-family: var(--font-data); font-size: 12px; font-variant-numeric: tabular-nums; }
+.swatch { display: inline-block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--hot); vertical-align: -1px; margin-right: 6px; }
+.foot { font-size: 13px; color: var(--muted); margin: 0; max-width: 65ch; }
+code { font-family: var(--font-data); font-size: .88em; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">ESP32-C6-LCD-1.47 · MLX90640 · 172 × 320 px portrait</div>
+    <h1>Thermal camera screen</h1>
+    <p class="lede">A pixel-accurate preview of what <code>src/main.cpp</code> draws. The sensor data is simulated, but the layout, palette, interpolation, smoothing, hot-spot marker and 5×7 text font match the firmware.</p>
+  </header>
+
+  <div class="stage">
+    <section class="bench" aria-label="Screen preview">
+      <div class="board">
+        <div class="lcd"><canvas id="lcd" width="172" height="320" aria-label="Simulated thermal image with temperature readouts"></canvas></div>
+        <button class="boot" id="boot" aria-pressed="false" title="Freeze or unfreeze the frame">BOOT</button>
+        <span class="silk">ESP32-C6</span>
+      </div>
+      <div class="caption">About 2× scale. The real panel is 1.47″ diagonal (about 18 × 33 mm). Press BOOT to freeze.</div>
+    </section>
+
+    <div class="side">
+      <div class="controls">
+        <div class="seg" role="group" aria-label="Scene">
+          <button id="scene-person" aria-pressed="true" data-scene="person">Person</button>
+          <button id="scene-mug" aria-pressed="false" data-scene="mug">Hot mug</button>
+          <button id="scene-hand" aria-pressed="false" data-scene="hand">Hand</button>
+        </div>
+        <label class="toggle"><input type="checkbox" id="raw"> Raw sensor pixels</label>
+      </div>
+
+      <section>
+        <h2>Screen layout</h2>
+        <div class="map-row">
+          <svg class="map" viewBox="0 0 150 250" role="img" aria-label="Layout map: 172 by 129 image at the top, colour bar, min and max, centre temperature, hot-spot temperature, fps and HOLD">
+            <rect x="2" y="2" width="129" height="240" fill="none" stroke="var(--muted)" stroke-width="1"></rect>
+            <rect x="2" y="5" width="129" height="97" fill="var(--accent)" fill-opacity=".18" stroke="var(--accent)" stroke-width="1"></rect>
+            <text x="66" y="52" text-anchor="middle">image</text>
+            <text x="66" y="63" text-anchor="middle" class="dim">172×129</text>
+            <rect x="9" y="110" width="114" height="8" fill="var(--accent)" fill-opacity=".45"></rect>
+            <text x="9" y="132">min</text>
+            <text x="123" y="132" text-anchor="end">max</text>
+            <text x="66" y="160" text-anchor="middle">centre</text>
+            <text x="66" y="200" text-anchor="middle" fill="var(--hot)" style="fill: var(--hot)">hot</text>
+            <text x="9" y="236" class="dim">fps</text>
+            <text x="123" y="236" text-anchor="end" class="dim">HOLD</text>
+            <text x="140" y="125" class="dim" transform="rotate(90 140 125)" text-anchor="middle">320 px</text>
+            <text x="66" y="250" text-anchor="middle" class="dim">172 px</text>
+          </svg>
+          <table>
+            <tr><td>Image</td><td>bilinear 32×24 → 172×129, y = 4</td></tr>
+            <tr><td>Crosshair</td><td>17 px, white, image centre</td></tr>
+            <tr><td><span class="swatch"></span>Hot spot</td><td>cyan ring r 5, sub-pixel centroid</td></tr>
+            <tr><td>Colour bar</td><td>152 × 10 px, cold left, hot right</td></tr>
+            <tr><td>Min / max</td><td>auto-range, ≥ 5 °C span, 30 % per frame</td></tr>
+            <tr><td>Centre</td><td>mean of 4 middle pixels, smoothed 25 %</td></tr>
+            <tr><td>Frame rate</td><td>~7.9 fps (sensor at 16 Hz subpages)</td></tr>
+            <tr><td>HOLD</td><td>BOOT button, 40 ms debounce</td></tr>
+          </table>
+        </div>
+      </section>
+
+      <p class="foot">Only the centre reading is smoothed, so the image stays sharp while the big number is easy to read. Tick “Raw sensor pixels” to see the sensor's real 32 × 24 resolution.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+(() => {
+  const W = 172, H = 320, SW = 32, SH = 24;
+  const IMG_W = W, IMG_H = (W * SH / SW) | 0, IMG_Y = 4;            // 172 x 129
+  const BAR_X = 10, BAR_W = W - 2 * BAR_X, BAR_Y = IMG_Y + IMG_H + 14, BAR_H = 10;
+  const FPS = 7.9;
+
+  const cv = document.getElementById('lcd');
+  const ctx = cv.getContext('2d');
+  const img = ctx.createImageData(W, H);
+  const px = new Uint32Array(img.data.buffer);
+
+  // RGB565 round-trip so colours band like the real panel
+  const rgb = (r, g, b) => {
+    r &= 0xF8; g &= 0xFC; b &= 0xF8;
+    r |= r >> 5; g |= g >> 6; b |= b >> 5;
+    return (255 << 24) | (b << 16) | (g << 8) | r;
+  };
+  const WHITE = rgb(255,255,255), BLACK = rgb(0,0,0), YELLOW = rgb(255,255,0),
+        DARKGREY = rgb(128,128,128), CYAN = rgb(0,255,255), RED = rgb(255,0,0);
+
+  // Same ironbow stops as buildPalette()
+  const stops = [[0,0,0,0],[.15,32,0,140],[.35,145,0,160],[.55,230,50,50],[.75,250,150,0],[.9,255,230,60],[1,255,255,255]];
+  const pal = new Uint32Array(256);
+  for (let i = 0; i < 256; i++) {
+    const t = i / 255; let s = 0;
+    while (s < stops.length - 2 && t > stops[s + 1][0]) s++;
+    const a = stops[s], b = stops[s + 1], u = (t - a[0]) / (b[0] - a[0]);
+    pal[i] = rgb(a[1] + u * (b[1] - a[1]), a[2] + u * (b[2] - a[2]), a[3] + u * (b[3] - a[3]));
+  }
+
+  // Adafruit GFX classic 5x7 font, only the glyphs the firmware prints
+  const font = {
+    '0':[0x3E,0x51,0x49,0x45,0x3E],'1':[0x00,0x42,0x7F,0x40,0x00],'2':[0x42,0x61,0x51,0x49,0x46],
+    '3':[0x21,0x41,0x45,0x4B,0x31],'4':[0x18,0x14,0x12,0x7F,0x10],'5':[0x27,0x45,0x45,0x45,0x39],
+    '6':[0x3C,0x4A,0x49,0x49,0x30],'7':[0x01,0x71,0x09,0x05,0x03],'8':[0x36,0x49,0x49,0x49,0x36],
+    '9':[0x06,0x49,0x49,0x29,0x1E],'.':[0x00,0x60,0x60,0x00,0x00],'-':[0x08,0x08,0x08,0x08,0x08],
+    'c':[0x38,0x44,0x44,0x44,0x20],'e':[0x38,0x54,0x54,0x54,0x18],'n':[0x7C,0x08,0x04,0x04,0x78],
+    't':[0x04,0x3F,0x44,0x40,0x20],'r':[0x7C,0x08,0x04,0x04,0x08],'h':[0x7F,0x08,0x04,0x04,0x78],
+    'o':[0x38,0x44,0x44,0x44,0x38],'f':[0x08,0x7E,0x09,0x01,0x02],'p':[0x7C,0x14,0x14,0x14,0x08],
+    's':[0x48,0x54,0x54,0x54,0x20],'C':[0x3E,0x41,0x41,0x41,0x22],'H':[0x7F,0x08,0x08,0x08,0x7F],
+    'O':[0x3E,0x41,0x41,0x41,0x3E],'L':[0x7F,0x40,0x40,0x40,0x40],'D':[0x7F,0x41,0x41,0x22,0x1C],
+    ' ':[0,0,0,0,0]
+  };
+  const fill = (x, y, w, h, c) => {
+    for (let j = y; j < y + h; j++) if (j >= 0 && j < H)
+      for (let i = x; i < x + w; i++) if (i >= 0 && i < W) px[j * W + i] = c;
+  };
+  // print() with setTextColor(fg, bg): 6x8 cell per char, background filled
+  const print = (str, x, y, size, fg, bg) => {
+    for (const ch of str) {
+      const g = font[ch] || font[' '];
+      for (let col = 0; col < 6; col++) {
+        const bits = col < 5 ? g[col] : 0;
+        for (let row = 0; row < 8; row++) {
+          const on = (bits >> row) & 1;
+          if (on || bg !== undefined) fill(x + col * size, y + row * size, size, size, on ? fg : bg);
+        }
+      }
+      x += 6 * size;
+    }
+  };
+  const f51 = v => v.toFixed(1);
+  const right = (s, n) => s.padStart(n, ' ');
+  const left = (s, n) => s.padEnd(n, ' ');
+
+  // ---- Simulated MLX90640 frames (already in display orientation) ----
+  let scene = 'person', t0 = performance.now();
+  const frame = new Float32Array(SW * SH);
+  const blob = (x, y, cx, cy, rx, ry) => Math.exp(-(((x - cx) / rx) ** 2 + ((y - cy) / ry) ** 2));
+  function sense(time) {
+    const s = time / 1000;
+    for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) {
+      let t = 21.5 + y * 0.06 + Math.sin(x * 0.3) * 0.25;     // room + slight floor gradient
+      if (scene === 'person') {
+        const hx = 16 + Math.sin(s * 0.5) * 3.5, hy = 9 + Math.sin(s * 0.8) * 0.8;
+        t += 12.6 * blob(x, y, hx, hy, 4.2, 5.2);                   // face
+        t += 1.4 * blob(x, y, hx - 1.6, hy + 0.6, 1, 0.8);          // inner eye corners run hottest
+        t += 1.4 * blob(x, y, hx + 1.6, hy + 0.6, 1, 0.8);
+        t += 9.5 * blob(x, y, hx, hy + 13, 9, 5.5) * (y > hy + 6);  // shoulders through a shirt
+        t -= 2.2 * blob(x, y, hx, hy - 4.5, 3.5, 1.4);             // hair is cooler
+      } else if (scene === 'mug') {
+        const cx = 14 + Math.sin(s * 0.3);
+        t += 38 * blob(x, y, cx, 15, 4, 5.5) * (y > 9);              // ceramic body
+        t += 30 * blob(x, y, cx, 9.5 - ((s * 3) % 6), 2.5, 2) * 0.35; // rising steam
+        t += 14 * blob(x, y, cx + 6, 15, 1.2, 3);                    // handle
+        t += 4 * blob(x, y, 25, 20, 3, 2);                           // phone charger on desk
+      } else {
+        const cx = 15 + Math.sin(s * 0.7) * 2.5, cy = 13 + Math.cos(s * 0.6);
+        t += 10.5 * blob(x, y, cx, cy + 2, 4.2, 4);                 // palm
+        for (let f = 0; f < 4; f++) t += 9 * blob(x, y, cx - 4.5 + f * 3, cy - 5.5 + Math.abs(f - 1.5) * 0.8, 1.1, 3.4);
+        t += 8.5 * blob(x, y, cx + 6, cy, 1.2, 2.6);                // thumb
+        t += 9 * blob(x, y, cx, cy + 9, 3, 4) * (y > cy + 4);       // wrist
+      }
+      t += (Math.random() - 0.5) * 0.5;                             // 16 Hz noise is higher
+      frame[y * SW + x] = t;
+    }
+  }
+  const P = (x, y) => frame[y * SW + x];
+
+  // Same tap tables as buildTaps()
+  const taps = (outLen, inLen) => Array.from({ length: outLen }, (_, o) => {
+    let f = (o + 0.5) * inLen / outLen - 0.5;
+    f = Math.min(Math.max(f, 0), inLen - 1);
+    const i0 = f | 0;
+    return [i0, Math.min(i0 + 1, inLen - 1), Math.round((f - i0) * 256)];
+  });
+  const tapX = taps(IMG_W, SW), tapY = taps(IMG_H, SH);
+
+  const rawBox = document.getElementById('raw');
+  const imgBuf = new Uint32Array(IMG_W * IMG_H);
+  const bufPixel = (x, y, c) => { if (x >= 0 && x < IMG_W && y >= 0 && y < IMG_H) imgBuf[y * IMG_W + x] = c; };
+
+  function renderImage(tMin, tMax) {
+    const k = 255 * 256 / Math.max(tMax - tMin, 1), raw = rawBox.checked;
+    const q = new Int32Array(SW * SH);
+    for (let i = 0; i < SW * SH; i++) q[i] = ((frame[i] - tMin) * k) | 0;
+    const col = new Int32Array(SW);
+    for (let oy = 0; oy < IMG_H; oy++) {
+      let [y0, y1, wy] = tapY[oy];
+      if (raw) { y0 = Math.min((oy * SH / IMG_H) | 0, SH - 1); y1 = y0; wy = 0; }
+      for (let x = 0; x < SW; x++) col[x] = q[y0 * SW + x] + (((q[y1 * SW + x] - q[y0 * SW + x]) * wy) >> 8);
+      for (let ox = 0; ox < IMG_W; ox++) {
+        let [x0, x1, wx] = tapX[ox];
+        if (raw) { x0 = Math.min((ox * SW / IMG_W) | 0, SW - 1); x1 = x0; wx = 0; }
+        const idx = (col[x0] + (((col[x1] - col[x0]) * wx) >> 8)) >> 8;
+        imgBuf[oy * IMG_W + ox] = pal[idx < 0 ? 0 : idx > 255 ? 255 : idx];
+      }
+    }
+  }
+
+  function drawCrosshair() {
+    const cx = IMG_W >> 1, cy = IMG_H >> 1;
+    for (let i = -8; i <= 8; i++) { bufPixel(cx + i, cy, WHITE); bufPixel(cx, cy + i, WHITE); }
+  }
+  function drawHotMarker(cx, cy) {
+    const r = 5;
+    for (let dy = -r - 1; dy <= r + 1; dy++) for (let dx = -r - 1; dx <= r + 1; dx++) {
+      const d2 = dx * dx + dy * dy;
+      if (d2 >= r * r - r && d2 <= r * r + r) bufPixel(cx + dx, cy + dy, CYAN);
+      else if (d2 > r * r + r && d2 <= (r + 1) * (r + 1) + r + 1) bufPixel(cx + dx, cy + dy, BLACK);
+    }
+  }
+  function findHotSpot() {
+    let mx = 0, my = 0, best = -1e6;
+    for (let y = 0; y < SH; y++) for (let x = 0; x < SW; x++) if (P(x, y) > best) { best = P(x, y); mx = x; my = y; }
+    let sw = 0, sx = 0, sy = 0;
+    for (let y = Math.max(my - 1, 0); y <= Math.min(my + 1, SH - 1); y++)
+      for (let x = Math.max(mx - 1, 0); x <= Math.min(mx + 1, SW - 1); x++) {
+        const w = P(x, y) - (best - 2);
+        if (w > 0) { sw += w; sx += w * x; sy += w * y; }
+      }
+    return [sx / sw, sy / sw, best];
+  }
+
+  let sMin = 20, sMax = 30, sCenter = NaN, fps = FPS, lastMs = 0;
+
+  function step(now) {
+    sense(now - t0);
+    let tMin = Infinity, tMax = -Infinity;
+    for (const v of frame) { if (v < tMin) tMin = v; if (v > tMax) tMax = v; }
+    if (tMax - tMin < 5) { const m = (tMax + tMin) / 2; tMin = m - 2.5; tMax = m + 2.5; }
+    sMin += 0.3 * (tMin - sMin);
+    sMax += 0.3 * (tMax - sMax);
+
+    const tCenter = (P(15, 11) + P(16, 11) + P(15, 12) + P(16, 12)) / 4;
+    sCenter = Number.isNaN(sCenter) ? tCenter : sCenter + 0.25 * (tCenter - sCenter);
+    const [hx, hy, tHot] = findHotSpot();
+
+    renderImage(sMin, sMax);
+    drawCrosshair();
+    drawHotMarker(((hx + 0.5) * IMG_W / SW) | 0, ((hy + 0.5) * IMG_H / SH) | 0);
+    for (let y = 0; y < IMG_H; y++) px.set(imgBuf.subarray(y * IMG_W, (y + 1) * IMG_W), (IMG_Y + y) * W);
+
+    if (lastMs) fps += 0.2 * (1000 / (now - lastMs) - fps);
+    lastMs = now;
+
+    const labelY = BAR_Y + BAR_H + 6;
+    print(left(f51(sMin), 5), BAR_X, labelY, 2, WHITE, BLACK);
+    print(right(f51(sMax), 5), BAR_X + BAR_W - 5 * 12, labelY, 2, WHITE, BLACK);
+    print(right(f51(sCenter), 5), 20, 222, 4, YELLOW, BLACK);
+    print('C', 20 + 5 * 24, 222, 2, YELLOW, BLACK);
+    print('hot ' + right(f51(tHot), 5), (W - 9 * 12) / 2, 268, 2, CYAN, BLACK);
+    print(fps.toFixed(1) + ' fps ', BAR_X, H - 14, 1, DARKGREY, BLACK);
+
+    ctx.putImageData(img, 0, 0);
+  }
+
+  function drawHoldBadge(frozen) {
+    const w = 4 * 12, x = W - BAR_X - w, y = H - 20;
+    if (frozen) print('HOLD', x, y, 2, RED, BLACK); else fill(x, y, w, 16, BLACK);
+    ctx.putImageData(img, 0, 0);
+  }
+
+  // Static parts drawn once, like drawStaticPanel()
+  px.fill(BLACK);
+  for (let i = 0; i < BAR_W; i++) fill(BAR_X + i, BAR_Y, 1, BAR_H, pal[(i * 255 / (BAR_W - 1)) | 0]);
+  print('centre', (W - 6 * 6) / 2, 206, 1, YELLOW, BLACK);
+
+  // Warm up the smoothed values so the first still frame looks settled
+  for (let i = 0; i < 12; i++) {
+    sense(0);
+    let a = Infinity, b = -Infinity; for (const v of frame) { a = Math.min(a, v); b = Math.max(b, v); }
+    sMin += 0.3 * (a - sMin); sMax += 0.3 * (b - sMax);
+  }
+  step(performance.now());
+  lastMs = 0; fps = FPS;
+
+  let frozen = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const boot = document.getElementById('boot');
+  const setFrozen = v => {
+    frozen = v;
+    boot.setAttribute('aria-pressed', String(v));
+    drawHoldBadge(v);
+    if (!v) lastMs = 0;
+  };
+  if (frozen) setFrozen(true);
+  setInterval(() => { if (!frozen) step(performance.now()); }, 1000 / FPS);
+
+  boot.addEventListener('click', () => setFrozen(!frozen));
+  rawBox.addEventListener('change', () => { if (frozen) { step(performance.now()); drawHoldBadge(true); } });
+  document.querySelectorAll('[data-scene]').forEach(b => b.addEventListener('click', () => {
+    scene = b.dataset.scene;
+    document.querySelectorAll('[data-scene]').forEach(o => o.setAttribute('aria-pressed', String(o === b)));
+    if (frozen) { step(performance.now()); drawHoldBadge(true); }
+  }));
+})();
+</script>

@@ -1,0 +1,16 @@
+# clangd reads compile_commands.json (pio run -t compiledb), which holds
+# GCC/RISC-V flags clang doesn't know. Drop them so headers resolve.
+CompileFlags:
+  Remove:
+    - -fstrict-volatile-bitfields
+    - -fno-tree-switch-conversion
+    - -fno-shrink-wrap
+    - -march=*
+    - -mabi=*
+    - -mlongcalls
+  Add:
+    - --target=riscv32-unknown-elf
+Diagnostics:
+  Suppress:
+    - drv_unknown_argument
+    - drv_unsupported_option_argument

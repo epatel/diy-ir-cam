@@ -1,0 +1,7 @@
+{
+  "name": "MLX90640",
+  "version": "1.0.0",
+  "description": "Melexis MLX90640 API (from pimoroni/mlx90640-library @ a92229a) with an Arduino Wire I2C driver",
+  "license": "Apache-2.0",
+  "frameworks": "arduino"
+}

@@ -1,0 +1,8 @@
+# PlatformIO build output
+.pio/
+
+# Editor tooling (regenerate with: pio run -t compiledb)
+compile_commands.json
+.cache/
+
+.DS_Store
