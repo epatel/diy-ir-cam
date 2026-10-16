@@ -19,14 +19,15 @@ menu:
 	echo "8 make compiledb            - refresh compile_commands.json for clangd"
 	echo "9 make clean                - remove build output"
 	echo "10 make setup               - one-time setup: pip in PlatformIO venv, submodule"
-	echo "11 make update_phony        - update .PHONY in Makefile"
+	echo "11 make schematic           - download Waveshare's board schematic into docs/"
+	echo "12 make update_phony        - update .PHONY in Makefile"
 
 select:
 	read -p ">>> " P ; "$(MAKE)" --no-print-directory menu | grep "^$$P " | cut -d ' ' -f2-3 | bash
 
 .SILENT:
 
-.PHONY: info menu select build flash serial serial_reset monitor devices mockup compiledb clean setup update_phony
+.PHONY: info menu select build flash serial serial_reset monitor devices mockup compiledb clean schematic setup update_phony 
 
 build:
 	$(PIO) run
@@ -54,6 +55,10 @@ compiledb:
 
 clean:
 	$(PIO) run -t clean
+
+schematic:
+	curl -fsSL -o docs/ESP32-C6-LCD-1.47_schemetics.pdf https://files.waveshare.com/wiki/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47_schemetics.pdf
+	echo "Saved docs/ESP32-C6-LCD-1.47_schemetics.pdf (gitignored)"
 
 setup:
 	$(PY) -m pip --version >/dev/null 2>&1 || $(PY) -m ensurepip

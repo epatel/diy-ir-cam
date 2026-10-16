@@ -20,8 +20,8 @@ an animated, pixel-accurate preview of the screen using simulated sensor data
 ## Wiring
 
 Four wires to four neighbouring pins, 11–14 on the board's pin 10–18 header
-(pin numbers from the schematic in
-[`docs/`](docs/ESP32-C6-LCD-1.47_schemetics.pdf)):
+(pin numbers from Waveshare's
+[schematic](https://files.waveshare.com/wiki/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47_schemetics.pdf)):
 
 | MLX90640 | ESP32-C6-LCD-1.47 |
 |---|---|
@@ -157,9 +157,10 @@ CLAUDE.md, cards/         agent docs: overview, known stack, on-demand cards
 project-plan.md           goal, decisions and current state
 .claude/                  agent settings, build-on-edit hook, project skills
 docs/                     reference material (not built)
-  ESP32-C6-LCD-1.47_schemetics.pdf   Waveshare board schematic
+  ESP32-C6-LCD-1.47_schemetics.pdf   Waveshare schematic (local only, gitignored)
   mlx90640-library/                  pimoroni/mlx90640-library (git submodule)
   mlx90640.py                        Pimoroni's MicroPython driver for Tufty
+  mlx90640.py.LICENSE                its MIT licence (Pimoroni Ltd)
 ```
 
 The reference library is a submodule; after cloning, fetch it with
@@ -189,8 +190,11 @@ because the ESP32 Wire buffer is 128 bytes.
 
 ## Licences
 
-- Melexis MLX90640 API and pimoroni/mlx90640-library: Apache 2.0
-  (`lib/MLX90640/LICENSE`).
-- `docs/mlx90640.py` comes from
-  [pimoroni/badgeware-contrib](https://github.com/pimoroni/badgeware-contrib);
-  check that repository's licence before redistributing it.
+- This project: MIT (`LICENSE`).
+- Melexis MLX90640 API in `lib/MLX90640/` and the `docs/mlx90640-library`
+  submodule: Apache 2.0 (`lib/MLX90640/LICENSE`).
+- `docs/mlx90640.py`, from
+  [pimoroni/badgeware-contrib](https://github.com/pimoroni/badgeware-contrib):
+  MIT, © Pimoroni Ltd (`docs/mlx90640.py.LICENSE`).
+- The board schematic is Waveshare's and isn't included; download it from
+  [Waveshare](https://files.waveshare.com/wiki/ESP32-C6-LCD-1.47/ESP32-C6-LCD-1.47_schemetics.pdf) (or `make schematic`).

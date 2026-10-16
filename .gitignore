@@ -6,3 +6,6 @@ compile_commands.json
 .cache/
 
 .DS_Store
+
+# Waveshare schematic: local reference copy, not redistributed
+docs/ESP32-C6-LCD-1.47_schemetics.pdf
