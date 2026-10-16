@@ -1,13 +1,13 @@
 # DIY IR Camera
 
-Arduino firmware (PlatformIO) for a handheld thermal camera: a Waveshare ESP32-C6-LCD-1.47 reads a Pimoroni MLX90640 over I²C and draws a 172×129 ironbow image plus temperature readouts on its portrait 172×320 ST7789 screen. Almost all logic is in `src/main.cpp`; the sensor driver is vendored in `lib/MLX90640/`. The user tests on real hardware connected over USB.
+Arduino firmware (PlatformIO) for a handheld thermal camera: a Waveshare ESP32-C6-LCD-1.47 reads a Pimoroni MLX90640 over I²C and draws a 172×129 ironbow image plus temperature readouts on its portrait 172×320 ST7789 screen. Almost all logic is in `src/main.cpp`; the Wi-Fi access point and its web page are in `src/web.cpp` / `src/web_page.h`; the sensor driver is vendored in `lib/MLX90640/`. The user tests on real hardware connected over USB.
 
 @project-plan.md
 
 ## Known stack
 
 - **PlatformIO + pioarduino** (`platformio.ini`): Arduino-ESP32 3.2 on ESP-IDF 5.4, board `esp32-c6-devkitc-1`. Not the official espressif32 platform.
-- **Arduino-ESP32**: `Wire` for I²C (128-byte buffer), `Ticker` for the button poll, `Serial` is native USB CDC.
+- **Arduino-ESP32**: `Wire` for I²C (128-byte buffer), `Ticker` for the button poll, `Serial` is native USB CDC. `WiFi` (soft AP), `WebServer` and `DNSServer` from the core for the web page; no extra libraries.
 - **Arduino_GFX** (moononournation): `Arduino_ESP32SPI` + `Arduino_ST7789`; colours are `RGB565_*`.
 - **Melexis MLX90640 API**: `lib/MLX90640/`, upstream C code unchanged; project code is only `MLX90640_I2C_Driver.cpp`.
 - **ESP32-C6**: RISC-V without FPU. Float maths is software-emulated and slow.
@@ -36,6 +36,7 @@ Read a card when the situation on the right applies. They're plain links, loaded
 
 - [hardware](cards/hardware.md) — wiring, choosing a GPIO, anything involving pins, buttons, power or how the sensor is mounted
 - [mlx90640](cards/mlx90640.md) — touching sensor reads, I²C, refresh rate, emissivity, or the vendored Melexis API
+- [wifi](cards/wifi.md) — the access point, captive-portal web page, `/frame.json`, or anything shared between the web task and `loop()`
 - [display](cards/display.md) — changing what's on screen, the layout, rendering speed, overlays, the freeze button, or the mockup
 - [toolchain](cards/toolchain.md) — a build, flash, serial or editor problem, or before running pio for the first time in a session
 

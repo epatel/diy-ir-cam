@@ -108,7 +108,25 @@ have an old PlatformIO on your PATH; use `~/.platformio/penv/bin/pio` instead.
 
 Hold the board upright and point the sensor at something. Press **BOOT** to
 freeze the current frame (a red `HOLD` appears bottom right); press it again
-to go live. Don't hold BOOT while resetting or plugging in, as that puts the
+to go live.
+
+Hold **BOOT** for about half a second to open the menu. A short press steps
+through *Spot off*, *Hot spot* and *Cold spot*; holding again selects
+and closes the menu (it also closes by itself after 6 s). A `*` marks the
+current choice. Only one spot is shown at a time: the hottest (default) or
+the coldest, both marked with a cyan ring.
+
+### Live view over Wi-Fi
+
+The camera runs its own open Wi-Fi network, **IR-Cam** (the name is shown at
+the bottom of the screen). Join it from a phone or laptop and the sign-in page
+opens by itself with the live image, the readouts and the options (spot off /
+hot / cold, freeze, save image). If it doesn't, browse to
+`http://192.168.4.1`. Saving the image works best from a normal browser tab
+rather than the sign-in window. The network has no internet access. To give it
+a password, set `AP_PASSWORD` in `src/web.h`.
+
+Don't hold BOOT while resetting or plugging in, as that puts the
 ESP32 into its bootloader.
 
 ## How it works

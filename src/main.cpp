@@ -7,6 +7,8 @@
 //
 // Screen layout (portrait 172x320, held upright):
 //   172x129 thermal image on top, colour bar + min/max, large centre temp.
+// Also a Wi-Fi access point ("IR-Cam") whose sign-in page shows the live
+// image and the options; see web.cpp.
 // The sensor's 32-pixel side runs along the board's short edge, so in
 // portrait the native 32x24 image fits without rotating it.
 
@@ -16,6 +18,7 @@
 #include <Arduino_GFX_Library.h>
 #include <MLX90640_API.h>
 #include <MLX90640_I2C_Driver.h>
+#include "web.h"
 
 // ---------- Pins (from Waveshare schematic) ----------
 #define LCD_MOSI 6
@@ -145,7 +148,7 @@ static void renderImage(float tMin, float tMax) {
 }
 
 // ---------- Overlays, drawn into imgBuf so they clip to the image ----------
-static const uint16_t HOT_COLOUR = RGB565_CYAN;  // not in the ironbow palette
+static const uint16_t SPOT_COLOUR = RGB565_CYAN;  // not in the ironbow palette; green looked too dark on the panel
 
 static inline void bufPixel(int x, int y, uint16_t c) {
   if (x >= 0 && x < IMG_W && y >= 0 && y < IMG_H) imgBuf[y * IMG_W + x] = c;
@@ -160,68 +163,97 @@ static void drawCrosshair() {
 }
 
 // Ring of radius r, with a black ring just outside so it reads on white-hot
-static void drawHotMarker(int cx, int cy) {
+static void drawSpotMarker(int cx, int cy, uint16_t colour) {
   const int r = 5;
   for (int dy = -r - 1; dy <= r + 1; dy++) {
     for (int dx = -r - 1; dx <= r + 1; dx++) {
       int d2 = dx * dx + dy * dy;
-      if (d2 >= r * r - r && d2 <= r * r + r) bufPixel(cx + dx, cy + dy, HOT_COLOUR);
+      if (d2 >= r * r - r && d2 <= r * r + r) bufPixel(cx + dx, cy + dy, colour);
       else if (d2 > r * r + r && d2 <= (r + 1) * (r + 1) + r + 1) bufPixel(cx + dx, cy + dy, RGB565_BLACK);
     }
   }
 }
 
-// Hottest sensor pixel (in display orientation), refined to sub-pixel with a
-// weighted centroid of its 3x3 neighbourhood so the marker doesn't jump
-static float findHotSpot(float &hx, float &hy) {
+// Hottest (sign +1) or coldest (sign -1) sensor pixel in display orientation,
+// refined to sub-pixel with a weighted centroid of its 3x3 neighbourhood so
+// the marker doesn't jump
+static float findSpot(float sign, float &hx, float &hy) {
   int mx = 0, my = 0;
   float best = -1e6;
   for (int y = 0; y < SENS_H; y++)
     for (int x = 0; x < SENS_W; x++)
-      if (px(x, y) > best) { best = px(x, y); mx = x; my = y; }
+      if (sign * px(x, y) > best) { best = sign * px(x, y); mx = x; my = y; }
 
   float sw = 0, sx = 0, sy = 0;
   for (int y = max(my - 1, 0); y <= min(my + 1, SENS_H - 1); y++)
     for (int x = max(mx - 1, 0); x <= min(mx + 1, SENS_W - 1); x++) {
-      float w = px(x, y) - (best - 2.0f);   // only pixels within 2 degrees count
+      float w = sign * px(x, y) - (best - 2.0f);   // only pixels within 2 degrees count
       if (w > 0) { sw += w; sx += w * x; sy += w * y; }
     }
   hx = sx / sw;
   hy = sy / sw;
-  return best;
+  return sign * best;
 }
 
+static int spotToImgX(float sx) { return (int)((sx + 0.5f) * IMG_W / SENS_W); }
+static int spotToImgY(float sy) { return (int)((sy + 0.5f) * IMG_H / SENS_H); }
+
+// ---------- Live state, kept between frames so the screen can be redrawn ----------
+static float sMin = 20, sMax = 30;      // smoothed range, avoids flicker
+static float sCenter = NAN;
+static float spotT, spotX, spotY;       // marked spot: temperature, sensor position
+static float fps = 0;
+static bool frozen = false;
+
+// One spot marker at a time: none, the hottest or the coldest pixel
+enum SpotMode { SPOT_OFF, SPOT_HOT, SPOT_COLD };
+static SpotMode spotMode = SPOT_HOT;
+
+static const int SPOT_X = (SCR_W - 10 * 12) / 2, SPOT_Y = 268;  // 10 chars at size 2
+
 static void drawStaticPanel() {
-  for (int i = 0; i < BAR_W; i++) {          // cold left, hot right
-    gfx->drawFastVLine(BAR_X + i, BAR_Y, BAR_H, palette[i * 255 / (BAR_W - 1)]);
-  }
   gfx->setTextSize(1);
   gfx->setTextColor(RGB565_YELLOW, RGB565_BLACK);
   gfx->setCursor((SCR_W - 6 * 6) / 2, 206);
   gfx->print("centre");
 }
 
-static void drawPanel(float tMin, float tMax, float tCenter, float tHot, float fps) {
+static void drawColourBar() {
+  for (int i = 0; i < BAR_W; i++) {          // cold left, hot right
+    gfx->drawFastVLine(BAR_X + i, BAR_Y, BAR_H, palette[i * 255 / (BAR_W - 1)]);
+  }
+}
+
+// Min/max and fps always; the centre and spot readouts share the area the
+// menu uses, so they're skipped while it is open
+static void drawPanel(bool readouts) {
   char buf[16];
   const int labelY = BAR_Y + BAR_H + 6;
 
   gfx->setTextSize(2);
   gfx->setTextColor(RGB565_WHITE, RGB565_BLACK);
-  snprintf(buf, sizeof(buf), "%-5.1f", tMin);
+  snprintf(buf, sizeof(buf), "%-5.1f", sMin);
   gfx->setCursor(BAR_X, labelY);                  gfx->print(buf);
-  snprintf(buf, sizeof(buf), "%5.1f", tMax);
+  snprintf(buf, sizeof(buf), "%5.1f", sMax);
   gfx->setCursor(BAR_X + BAR_W - 5 * 12, labelY); gfx->print(buf);
 
-  gfx->setTextSize(4);
-  gfx->setTextColor(RGB565_YELLOW, RGB565_BLACK);
-  snprintf(buf, sizeof(buf), "%5.1f", tCenter);
-  gfx->setCursor(20, 222); gfx->print(buf);
-  gfx->setTextSize(2);
-  gfx->setCursor(20 + 5 * 24, 222); gfx->print("C");
+  if (readouts) {
+    gfx->setTextSize(4);
+    gfx->setTextColor(RGB565_YELLOW, RGB565_BLACK);
+    snprintf(buf, sizeof(buf), "%5.1f", sCenter);
+    gfx->setCursor(20, 222); gfx->print(buf);
+    gfx->setTextSize(2);
+    gfx->setCursor(20 + 5 * 24, 222); gfx->print("C");
 
-  gfx->setTextColor(HOT_COLOUR, RGB565_BLACK);
-  snprintf(buf, sizeof(buf), "hot %5.1f", tHot);
-  gfx->setCursor((SCR_W - 9 * 12) / 2, 268); gfx->print(buf);
+    if (spotMode == SPOT_OFF) {
+      gfx->fillRect(SPOT_X, SPOT_Y, 10 * 12, 16, RGB565_BLACK);
+    } else {
+      const bool hot = spotMode == SPOT_HOT;
+      gfx->setTextColor(SPOT_COLOUR, RGB565_BLACK);
+      snprintf(buf, sizeof(buf), hot ? "hot  %5.1f" : "cold %5.1f", spotT);
+      gfx->setCursor(SPOT_X, SPOT_Y); gfx->print(buf);
+    }
+  }
 
   gfx->setTextSize(1);
   gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
@@ -229,27 +261,48 @@ static void drawPanel(float tMin, float tMax, float tCenter, float tHot, float f
   gfx->setCursor(BAR_X, SCR_H - 14); gfx->print(buf);
 }
 
-// ---------- Freeze frame (BOOT button) ----------
+// Image plus overlays from the current frame[]; also used to redraw a
+// frozen frame when the spot mode changes
+static void drawThermal() {
+  renderImage(sMin, sMax);
+  drawCrosshair();
+  if (spotMode != SPOT_OFF) {
+    const bool hot = spotMode == SPOT_HOT;
+    spotT = findSpot(hot ? 1 : -1, spotX, spotY);
+    drawSpotMarker(spotToImgX(spotX), spotToImgY(spotY), SPOT_COLOUR);
+  }
+  gfx->draw16bitRGBBitmap(IMG_X, IMG_Y, imgBuf, IMG_W, IMG_H);
+}
+
+// ---------- BOOT button: short and long presses ----------
 // readFrame() blocks for most of each frame, so the button is sampled every
 // 5 ms by a background timer instead of in loop(). A press counts after 8
 // low samples in a row (40 ms), and the button must read high for 8 samples
 // before the next press can count, so bounce on press or release is ignored.
-static volatile bool holdToggled = false;
+// A long press fires as soon as it has been held long enough; a short press
+// fires on release.
+static const int BTN_TICK_MS = 5;
+static const int LONG_TICKS  = 600 / BTN_TICK_MS;
+static volatile bool shortPress = false, longPress = false;
 static Ticker buttonTicker;
 
-static void pollHoldButton() {
+static void pollButton() {
   static uint8_t history = 0xFF;
   static bool pressed = false;
+  static int heldTicks = 0;
   history = (history << 1) | (digitalRead(BTN_HOLD) ? 1 : 0);
   if (!pressed && history == 0x00) {
     pressed = true;
-    holdToggled = true;
+    heldTicks = 0;
   } else if (pressed && history == 0xFF) {
     pressed = false;
+    if (heldTicks < LONG_TICKS) shortPress = true;
+  } else if (pressed && heldTicks < LONG_TICKS && ++heldTicks == LONG_TICKS) {
+    longPress = true;
   }
 }
 
-static void drawHoldBadge(bool frozen) {
+static void drawHoldBadge() {
   const int w = 4 * 12, h = 16, x = SCR_W - BAR_X - w, y = SCR_H - 20;
   if (frozen) {
     gfx->setTextSize(2);
@@ -258,6 +311,111 @@ static void drawHoldBadge(bool frozen) {
     gfx->print("HOLD");
   } else {
     gfx->fillRect(x, y, w, h, RGB565_BLACK);
+  }
+}
+
+// ---------- Menu: long press opens, short press steps, long press selects ----------
+// Drawn over the centre/spot readouts; the image keeps running behind it.
+// The items are the spot modes, in SpotMode order; a '*' marks the current
+// one. Selecting sets that mode and closes the menu; it also closes after
+// MENU_TIMEOUT_MS without a press.
+static const int MENU_COUNT = 3;
+static const char *const MENU_LABELS[MENU_COUNT] = {"Spot off", "Hot spot", "Cold spot"};
+static const int MENU_Y = 196, MENU_H = 102;   // between the min/max labels and HOLD
+static const uint32_t MENU_TIMEOUT_MS = 6000;
+static bool menuOpen = false;
+static int menuSel = 0;
+static uint32_t menuLastMs = 0;
+
+static void drawMenu() {
+  char buf[16];
+  gfx->setTextSize(2);
+  for (int i = 0; i < MENU_COUNT; i++) {
+    const int y = MENU_Y + 6 + i * 22;
+    const uint16_t fg = i == menuSel ? RGB565_BLACK : RGB565_WHITE;
+    const uint16_t bg = i == menuSel ? RGB565_YELLOW : RGB565_BLACK;
+    gfx->fillRect(4, y - 2, SCR_W - 8, 20, bg);
+    gfx->setTextColor(fg, bg);
+    snprintf(buf, sizeof(buf), "%c %s", spotMode == i ? '*' : ' ', MENU_LABELS[i]);
+    gfx->setCursor(14, y); gfx->print(buf);
+  }
+}
+
+static void openMenu() {
+  menuOpen = true;
+  menuSel = 0;
+  gfx->fillRect(0, MENU_Y, SCR_W, MENU_H, RGB565_BLACK);
+  drawMenu();
+}
+
+static void closeMenu() {
+  menuOpen = false;
+  gfx->fillRect(0, MENU_Y, SCR_W, MENU_H, RGB565_BLACK);
+  drawStaticPanel();
+  drawPanel(true);
+}
+
+// Hand the web page a copy of the current state, after every frame and
+// after any change made while frozen
+static void publishWeb() {
+  static WebSnapshot s;
+  for (int y = 0; y < SENS_H; y++)
+    for (int x = 0; x < SENS_W; x++) s.t[y * SENS_W + x] = (int16_t)lroundf(px(x, y) * 10);
+  s.tMin = sMin; s.tMax = sMax; s.centre = sCenter;
+  s.spotT = spotT; s.spotX = spotX; s.spotY = spotY; s.fps = fps;
+  s.spotMode = spotMode;
+  s.frozen = frozen;
+  webPublish(s);
+}
+
+static void setFrozen(bool on) {
+  frozen = on;
+  drawHoldBadge();
+  publishWeb();
+}
+
+static void setSpotMode(SpotMode m) {
+  spotMode = m;
+  if (frozen) {                        // show the change on the held frame
+    drawThermal();
+    if (!menuOpen) drawPanel(true);
+    publishWeb();
+  }
+}
+
+static void selectMenuItem() {
+  setSpotMode((SpotMode)menuSel);
+  closeMenu();
+}
+
+// Changes made on the web page
+static void handleWeb() {
+  int v = webTakeSpotRequest();
+  if (v >= 0) {
+    setSpotMode((SpotMode)v);
+    if (menuOpen) drawMenu();          // keep the '*' right
+  }
+  v = webTakeFreezeRequest();
+  if (v >= 0 && (bool)v != frozen) setFrozen(v);
+}
+
+// Outside the menu a short press still toggles freeze directly
+static void handleButton() {
+  const bool s = shortPress, l = longPress;
+  shortPress = false;
+  longPress = false;
+  if (s || l) menuLastMs = millis();
+
+  if (!menuOpen) {
+    if (l) openMenu();
+    else if (s) setFrozen(!frozen);
+  } else if (l) {
+    selectMenuItem();
+  } else if (s) {
+    menuSel = (menuSel + 1) % MENU_COUNT;
+    drawMenu();
+  } else if (millis() - menuLastMs > MENU_TIMEOUT_MS) {
+    closeMenu();
   }
 }
 
@@ -283,6 +441,7 @@ void setup() {
   buildPalette();
   buildTaps(tapX, IMG_W, SENS_W);
   buildTaps(tapY, IMG_H, SENS_H);
+  drawColourBar();
   drawStaticPanel();
 
   imgBuf = (uint16_t *)malloc(IMG_W * IMG_H * sizeof(uint16_t));
@@ -304,7 +463,13 @@ void setup() {
   MLX90640_SetRefreshRate(MLX_ADDR, MLX_RATE);  // 16 Hz subpages = ~8 full frames/s
 
   pinMode(BTN_HOLD, INPUT_PULLUP);
-  buttonTicker.attach_ms(5, pollHoldButton);
+  buttonTicker.attach_ms(BTN_TICK_MS, pollButton);
+
+  webBegin();
+  gfx->setTextSize(1);
+  gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
+  gfx->setCursor(70, SCR_H - 14);
+  gfx->print(AP_SSID);
 
   Serial.println("Thermal camera ready");
 }
@@ -324,17 +489,12 @@ static bool readFrame() {
 
 void loop() {
   static uint32_t lastMs = 0;
-  static float fps = 0;
-  static float sMin = 20, sMax = 30;   // smoothed range, avoids flicker
-  static bool frozen = false;
 
-  if (holdToggled) {
-    holdToggled = false;
-    frozen = !frozen;
-    drawHoldBadge(frozen);
-    if (!frozen) lastMs = 0;           // don't count the pause in the fps
-  }
-  if (frozen) {                        // leave the last frame on screen
+  const bool wasFrozen = frozen;
+  handleButton();
+  handleWeb();
+  if (wasFrozen && !frozen) lastMs = 0;  // don't count the pause in the fps
+  if (frozen) {                          // leave the last frame on screen
     delay(20);
     return;
   }
@@ -350,7 +510,7 @@ void loop() {
     if (t < tMin) tMin = t;
     if (t > tMax) tMax = t;
   }
-  if (tMax - tMin < 5) {               // keep at least a 5 degree span
+  if (tMax - tMin < 5) {                 // keep at least a 5 degree span
     float mid = (tMax + tMin) / 2;
     tMin = mid - 2.5f;
     tMax = mid + 2.5f;
@@ -359,21 +519,15 @@ void loop() {
   sMax += 0.3f * (tMax - sMax);
 
   // Centre reading is smoothed (~0.5 s at 8 fps); the image stays raw
-  static float sCenter = NAN;
   float tCenter = (px(15, 11) + px(16, 11) + px(15, 12) + px(16, 12)) / 4;
   sCenter = isnan(sCenter) ? tCenter : sCenter + 0.25f * (tCenter - sCenter);
 
-  float hx, hy;
-  float tHot = findHotSpot(hx, hy);
-
-  renderImage(sMin, sMax);
-  drawCrosshair();
-  drawHotMarker((int)((hx + 0.5f) * IMG_W / SENS_W), (int)((hy + 0.5f) * IMG_H / SENS_H));
-  gfx->draw16bitRGBBitmap(IMG_X, IMG_Y, imgBuf, IMG_W, IMG_H);
+  drawThermal();
 
   uint32_t now = millis();
   if (lastMs) fps += 0.2f * (1000.0f / (now - lastMs) - fps);
   lastMs = now;
 
-  drawPanel(sMin, sMax, sCenter, tHot, fps);
+  drawPanel(!menuOpen);
+  publishWeb();
 }

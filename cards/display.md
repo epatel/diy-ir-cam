@@ -15,14 +15,16 @@ Screen layout, rendering pipeline and drawing conventions in `src/main.cpp`.
 |---|---|---|
 | Thermal image | x 0, y 4, 172×129 | bilinear from 32×24 (5.375×) |
 | Crosshair | image centre, ±8 px | white, drawn into `imgBuf` |
-| Hot-spot ring | r 5, cyan + black outer ring | drawn into `imgBuf` |
+| Spot ring | r 5, cyan + black outer ring, for hot and cold alike | drawn into `imgBuf`; one at a time per `spotMode` |
 | Colour bar | x 10, y 147, 152×10 | cold left → hot right; static, drawn once |
 | Min / max | y 163, size 2 | smoothed auto-range |
 | "centre" label | y 206, size 1 | static, drawn once |
 | Centre temp | x 20, y 222, size 4 + "C" size 2 | smoothed (EMA 0.25) |
-| Hot temp | y 268, size 2, cyan | raw hottest pixel |
+| Spot temp | x 26, y 268, size 2, cyan, `hot  ` / `cold ` prefix | raw hottest or coldest pixel; blanked when spot is off |
 | fps | x 10, y 306, size 1, dark grey | |
+| SSID | x 70, y 306, size 1, dark grey | `AP_SSID`, static, drawn once in `setup()` |
 | HOLD badge | bottom right, size 2, red | only while frozen |
+| Menu | y 196–297, replaces centre/spot readouts | three rows size 2 at y 202/224/246, text x 14; selected row black on yellow; `*` marks the current state |
 
 Text uses the built-in 5×7 font in 6×8 cells × size, printed with `setTextColor(fg, bg)` so each update overwrites the previous value. Numbers are fixed-width (`%5.1f`) so stale digits never remain.
 
@@ -30,12 +32,13 @@ Text uses the built-in 5×7 font in 6×8 cells × size, printed with `setTextCol
 
 ## Per-frame pipeline (`loop()`)
 
-1. If the freeze flag toggled, flip `frozen` and draw/clear the HOLD badge; while frozen, return early so the last frame stays.
+1. `handleButton()` and `handleWeb()` act on button events and web-page requests (freeze, menu, spot mode); while frozen, return early so the last frame stays.
 2. `readFrame()`: two subpages → `frame[768]` in °C, sensor order.
 3. Frame min/max → enforce ≥ 5 °C span → smooth range 30 % per frame.
-4. Centre = mean of the 4 middle pixels, EMA-smoothed. Hot spot = max pixel refined by a 3×3 weighted centroid (pixels within 2 °C of max).
-5. `renderImage()` into `imgBuf` (172×129 RGB565 on the heap), then crosshair and ring into `imgBuf`, then one `draw16bitRGBBitmap`. Drawing overlays into the buffer avoids flicker and clips them to the image.
-6. Panel text.
+4. Centre = mean of the 4 middle pixels, EMA-smoothed. Spot (in `drawThermal()`) = max or min pixel per `spotMode`, refined by a 3×3 weighted centroid (pixels within 2 °C of the extreme); `findSpot(±1)`.
+5. `drawThermal()`: `renderImage()` into `imgBuf` (172×129 RGB565 on the heap), then crosshair and the spot ring (if any) into `imgBuf`, then one `draw16bitRGBBitmap`. Drawing overlays into the buffer avoids flicker and clips them to the image. Per-frame values live in file-level statics so a frozen frame can be redrawn when the spot mode changes.
+6. `drawPanel(!menuOpen)`: min/max and fps always; centre and spot only when the menu is closed.
+7. `publishWeb()`: snapshot for the web page (see [wifi](wifi.md)).
 
 ## Rendering is fixed point
 
@@ -43,6 +46,11 @@ The ESP32-C6 has no FPU. The original float bilinear loop took ~324 ms per frame
 
 Measured per full frame (earlier 224×168 image, 8 Hz): render 9 ms, LCD push 20 ms, `CalculateTo` 46 ms, rest waiting on the sensor.
 
-## Freeze button
+## BOOT button and menu
 
-BOOT (GPIO9) toggles HOLD. `loop()` blocks in `readFrame()` for most of each frame, so the button is sampled every 5 ms by a `Ticker`. A press counts after 8 consecutive low samples (40 ms) and must see 8 high samples before re-arming. An earlier edge-interrupt + 200 ms lockout double-toggled on release bounce when the button was held longer than 200 ms.
+BOOT (GPIO9) is the only button. `loop()` blocks in `readFrame()` for most of each frame, so `pollButton()` samples it every 5 ms from a `Ticker`. A press counts after 8 consecutive low samples (40 ms) and must see 8 high samples before re-arming. Held 600 ms → `longPress` fires immediately (while still held); released earlier → `shortPress` on release. An earlier edge-interrupt + 200 ms lockout double-toggled on release bounce when the button was held longer than 200 ms.
+
+- Outside the menu: short press toggles freeze (HOLD), long press opens the menu.
+- In the menu: short press steps through Spot off / Hot spot / Cold spot (exclusive; same order as `SpotMode`); long press selects that mode and closes the menu. It also closes after 6 s without a press. Freeze isn't in the menu; the short press covers it.
+- Events are handled once per `loop()`, i.e. up to one frame (~125 ms) late while live, every 20 ms while frozen.
+- Default spot mode: hot.

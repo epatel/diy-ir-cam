@@ -19,8 +19,11 @@ A handheld thermal camera: Waveshare ESP32-C6-LCD-1.47 + Pimoroni MLX90640, show
 - [x] Fixed-point rendering (2 → 4 fps), then 16 Hz subpages (~7.9 fps)
 - [x] Portrait layout matching the sensor mounting; orientation verified on hardware
 - [x] Smoothed centre reading, hot-spot marker, BOOT freeze with debouncer
+- [x] Cold-spot marker and readout, as an alternative to the hot spot
+- [x] BOOT menu (long press): spot off / hot / cold
 - [x] HTML mockup in sync with the firmware; README; git repo
-- [ ] Next ideas (not committed to): sensor-ambient readout, palette switching, snapshots to microSD, Wi-Fi image streaming
+- [x] Wi-Fi access point "IR-Cam" with a captive-portal page: live image, readouts, spot/freeze options, save PNG
+- [ ] Next ideas (not committed to): sensor-ambient readout, palette switching, snapshots to microSD
 
 ## Decisions
 
@@ -30,10 +33,13 @@ A handheld thermal camera: Waveshare ESP32-C6-LCD-1.47 + Pimoroni MLX90640, show
 - 2026-10-16: Per-pixel rendering in fixed point; the C6 has no FPU (float version: 324 ms/frame).
 - 2026-10-16: 16 Hz subpage rate (~7.9 fps). Only the centre reading is smoothed (EMA 0.25); the image stays raw.
 - 2026-10-16: Freeze on BOOT (GPIO9) with a 5 ms polled, 8-sample debouncer.
+- 2026-10-16: One-button menu: long press (600 ms, fires while held) opens; short steps; long selects and closes; 6 s timeout. Items: Spot off, Hot spot, Cold spot (exclusive). Freeze stays on the short press outside the menu, not in the menu. Default spot: hot.
+- 2026-10-16: Wi-Fi as an open access point (not station mode) with a captive portal, so the live page opens as the sign-in page. The web server runs in its own task and only exchanges a snapshot and request flags with `loop()`; the browser renders the image from raw temperatures.
+- 2026-10-16: Cold spot uses the same cyan as the hot spot (green was too dark on the panel). Only one spot is shown at a time (off / hot / cold), so both share one marker and one readout line.
 
 ## Current state
 
-Everything above works on the hardware and is committed. No work in progress.
+Everything above works on the hardware and is committed; the Wi-Fi page is verified on a phone. Not yet measured: fps while a phone is watching. No work in progress. Everything else works on the hardware and is committed.
 
 ## Open questions
 
