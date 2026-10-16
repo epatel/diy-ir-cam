@@ -6,6 +6,11 @@ Pimoroni MLX90640 thermal camera breakout. The board is held upright
 ironbow palette, with a colour scale, min/max, a large (smoothed) centre-spot
 temperature, and a cyan ring marking the hottest spot with its temperature.
 
+<p align="center">
+  <img src="images/screen.jpg" width="49%" alt="The camera running: ironbow thermal image, colour scale 20.3–25.2 °C, centre reading 23.8 °C, hot spot 25.6 °C, 7.9 fps">
+  <img src="images/hardware.jpg" width="49%" alt="The MLX90640 breakout soldered onto the back of the ESP32-C6-LCD-1.47 board, USB-C cable attached">
+</p>
+
 Open [`mockup/screen-mockup.html`](mockup/screen-mockup.html) in a browser for
 an animated, pixel-accurate preview of the screen using simulated sensor data
 (press its BOOT button to try the freeze).
@@ -155,6 +160,7 @@ tools/serial-read.py      non-interactive serial reader (for scripts/agents)
 Makefile                  menu and short targets for build/flash/serial
 CLAUDE.md, cards/         agent docs: overview, known stack, on-demand cards
 project-plan.md           goal, decisions and current state
+images/                   photos for this README
 .claude/                  agent settings, build-on-edit hook, project skills
 docs/                     reference material (not built)
   ESP32-C6-LCD-1.47_schemetics.pdf   Waveshare schematic (local only, gitignored)
