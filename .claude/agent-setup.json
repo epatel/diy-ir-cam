@@ -1,0 +1,28 @@
+{
+  "source": "https://ai.memention.net/setup",
+  "version": "2026-10-16.3",
+  "updated": "2026-10-16",
+  "applied": [
+    "known-stack",
+    "context-cards",
+    "hooks-over-prose",
+    "project-plan",
+    "skill:makefile-actions",
+    "skill:review-agentic-setup"
+  ],
+  "declined": [],
+  "copied": {
+    ".claude/skills/makefile-actions/SKILL.md": {
+      "pattern": "skill:makefile-actions",
+      "sha256": "f064f05f7bd7e443bd603d176bc5b752ac8fd7bdea6ce67cc76a2d47fe569ad8"
+    },
+    ".claude/skills/review-agentic-setup/SKILL.md": {
+      "pattern": "skill:review-agentic-setup",
+      "sha256": "7c606f1d45b9404180b9db7c5e2b42f0d3fa985b6e2093aa5b8ddde93bc6d459"
+    },
+    ".claude/skills/review-agentic-setup/references/rubric.md": {
+      "pattern": "skill:review-agentic-setup",
+      "sha256": "e415311ef81786ab9377e5b201ddbf161b65e4c6b8e62678a0b2d4e2536ff6d6"
+    }
+  }
+}

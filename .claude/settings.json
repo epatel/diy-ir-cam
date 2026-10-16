@@ -1,0 +1,37 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make build:*)",
+      "Bash(make flash:*)",
+      "Bash(make serial:*)",
+      "Bash(make serial_reset:*)",
+      "Bash(make devices:*)",
+      "Bash(make compiledb:*)",
+      "Bash(~/.platformio/penv/bin/pio run:*)",
+      "Bash(~/.platformio/penv/bin/pio device list:*)",
+      "Bash(~/.platformio/penv/bin/python tools/serial-read.py:*)"
+    ],
+    "ask": [
+      "Edit(lib/MLX90640/MLX90640_API.cpp)",
+      "Edit(lib/MLX90640/MLX90640_API.h)",
+      "Edit(lib/MLX90640/MLX90640_I2C_Driver.h)"
+    ],
+    "deny": [
+      "Edit(docs/mlx90640-library/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/build-on-edit.sh",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -84,15 +84,20 @@ because the official espressif32 platform doesn't ship Arduino core 3.x, which
 the ESP32-C6 needs.
 
 ```sh
-pio run                      # build
-pio run -t upload -t monitor # flash and open the serial monitor
-pio run -t compiledb         # refresh compile_commands.json for your editor
+make                 # numbered menu of everything below
+make build           # build
+make flash           # build and flash (port auto-detected; PORT=... to override)
+make monitor         # interactive serial monitor
+make compiledb       # refresh compile_commands.json for your editor
+make setup           # one-time: pip in PlatformIO's venv, fetch the submodule
 ```
+
+The Makefile calls `~/.platformio/penv/bin/pio` directly.
 
 If the upload can't connect, hold **BOOT** while plugging in USB, then retry.
 
-If `pio` complains about the Python version, you may have an old PlatformIO
-on your PATH; use `~/.platformio/penv/bin/pio` instead.
+If you run `pio` by hand and it complains about the Python version, you may
+have an old PlatformIO on your PATH; use `~/.platformio/penv/bin/pio` instead.
 
 ## Using it
 
@@ -146,6 +151,11 @@ platformio.ini            build configuration
 src/main.cpp              display, rendering and main loop
 lib/MLX90640/             Melexis MLX90640 API + Arduino Wire I2C driver
 mockup/screen-mockup.html animated preview of the screen
+tools/serial-read.py      non-interactive serial reader (for scripts/agents)
+Makefile                  menu and short targets for build/flash/serial
+CLAUDE.md, cards/         agent docs: overview, known stack, on-demand cards
+project-plan.md           goal, decisions and current state
+.claude/                  agent settings, build-on-edit hook, project skills
 docs/                     reference material (not built)
   ESP32-C6-LCD-1.47_schemetics.pdf   Waveshare board schematic
   mlx90640-library/                  pimoroni/mlx90640-library (git submodule)
