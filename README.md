@@ -41,16 +41,24 @@ has no 32 kHz crystal, and they aren't strapping pins, so they're free for I²C.
 
 ```mermaid
 block-beta
-  columns 3
-  MLX["Pimoroni MLX90640"] space H["ESP32-C6 header, pins 11-14"]
-  V["3-6V"] space P11["11 GND"]
-  SDA space P12["12 3V3"]
-  SCL space P13["13 IO0"]
-  G["GND"] space P14["14 IO1"]
-  V --- P12
-  SDA --- P13
-  SCL --- P14
-  G --- P11
+  columns 4
+  MLX["Pimoroni MLX90640"] space space H["ESP32-C6 header, pins 11-14"]
+  V["3-6V"] a1((" ")) b1((" ")) P11["11 GND"]
+  SDA a2((" ")) b2((" ")) P12["12 3V3"]
+  SCL a3((" ")) b3((" ")) P13["13 IO0"]
+  G["GND"] a4((" ")) b4((" ")) P14["14 IO1"]
+  V --- a1
+  SDA --- a2
+  SCL --- a3
+  G --- a4
+  b1 --- P11
+  b2 --- P12
+  b3 --- P13
+  b4 --- P14
+  a1 --- b2
+  a2 --- b3
+  a3 --- b4
+  a4 --- b1
   classDef title fill:none,stroke:none,font-weight:bold
   class MLX,H title
 ```
