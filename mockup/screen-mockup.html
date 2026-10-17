@@ -222,7 +222,7 @@ code { font-family: var(--font-data); font-size: .88em; }
             <tr><td>Frame rate</td><td>~7.9 fps (sensor at 16 Hz subpages)</td></tr>
             <tr><td>Wi-Fi</td><td>open AP “IR-Cam”, live page at 192.168.4.1</td></tr>
             <tr><td>HOLD</td><td>BOOT short press, 40 ms debounce</td></tr>
-            <tr><td>Menu</td><td>hold BOOT 0.6 s; short steps, hold selects: spot off / hot / cold</td></tr>
+            <tr><td>Menu</td><td>hold BOOT 0.6 s; short steps, hold selects: spot off / hot / cold, Wi-Fi on/off</td></tr>
           </table>
         </div>
       </section>
@@ -273,7 +273,7 @@ code { font-family: var(--font-data); font-size: .88em; }
     't':[0x04,0x3F,0x44,0x40,0x20],'r':[0x7C,0x08,0x04,0x04,0x08],'h':[0x7F,0x08,0x04,0x04,0x78],
     'o':[0x38,0x44,0x44,0x44,0x38],'f':[0x08,0x7E,0x09,0x01,0x02],'p':[0x7C,0x14,0x14,0x14,0x08],
     's':[0x48,0x54,0x54,0x54,0x20],'C':[0x3E,0x41,0x41,0x41,0x22],'H':[0x7F,0x08,0x08,0x08,0x7F],
-    'O':[0x3E,0x41,0x41,0x41,0x3E],'l':[0x00,0x41,0x7F,0x40,0x00],'d':[0x38,0x44,0x44,0x48,0x7F],'F':[0x7F,0x09,0x09,0x09,0x01],'z':[0x44,0x64,0x54,0x4C,0x44],'m':[0x7C,0x04,0x18,0x04,0x78],'u':[0x3C,0x40,0x40,0x20,0x7C],'*':[0x08,0x2A,0x1C,0x2A,0x08],'I':[0x00,0x41,0x7F,0x41,0x00],'R':[0x7F,0x09,0x19,0x29,0x46],'a':[0x20,0x54,0x54,0x54,0x78],'L':[0x7F,0x40,0x40,0x40,0x40],'D':[0x7F,0x41,0x41,0x22,0x1C],
+    'O':[0x3E,0x41,0x41,0x41,0x3E],'l':[0x00,0x41,0x7F,0x40,0x00],'d':[0x38,0x44,0x44,0x48,0x7F],'F':[0x7F,0x09,0x09,0x09,0x01],'z':[0x44,0x64,0x54,0x4C,0x44],'m':[0x7C,0x04,0x18,0x04,0x78],'u':[0x3C,0x40,0x40,0x20,0x7C],'*':[0x08,0x2A,0x1C,0x2A,0x08],'I':[0x00,0x41,0x7F,0x41,0x00],'R':[0x7F,0x09,0x19,0x29,0x46],'a':[0x20,0x54,0x54,0x54,0x78],'W':[0x3F,0x40,0x38,0x40,0x3F],'i':[0x00,0x44,0x7D,0x40,0x00],'L':[0x7F,0x40,0x40,0x40,0x40],'D':[0x7F,0x41,0x41,0x22,0x1C],
     ' ':[0,0,0,0,0]
   };
   const fill = (x, y, w, h, c) => {
@@ -394,6 +394,8 @@ code { font-family: var(--font-data); font-size: .88em; }
   const SPOT_X = (W - 10 * 12) / 2, SPOT_Y = 268;
   const show = () => ctx.putImageData(img, 0, 0);
 
+  // AP_SSID on the fps line doubles as the Wi-Fi indicator, like drawWifiLabel()
+  function drawWifiLabel() { if (wifiOn) print('IR-Cam', 70, H - 14, 1, DARKGREY, BLACK); else fill(70, H - 14, 36, 8, BLACK); }
   function drawStaticPanel() { print('centre', (W - 6 * 6) / 2, 206, 1, YELLOW, BLACK); }
 
   function drawPanel(readouts) {
@@ -445,14 +447,16 @@ code { font-family: var(--font-data); font-size: .88em; }
   }
 
   // Menu, same as the firmware: long press opens, short steps, long selects
-  const MENU_LABELS = ['Spot off', 'Hot spot', 'Cold spot'];
+  const MENU_LABELS = ['Spot off', 'Hot spot', 'Cold spot', 'Wi-Fi'], MENU_WIFI = 3;
+  let wifiOn = true;
   const MENU_Y = 196, MENU_H = 102, MENU_TIMEOUT_MS = 6000;
   function drawMenu() {
     MENU_LABELS.forEach((label, i) => {
       const y = MENU_Y + 6 + i * 22, sel = i === menuSel;
       const fg = sel ? BLACK : WHITE, bg = sel ? YELLOW : BLACK;
       fill(4, y - 2, W - 8, 20, bg);
-      print((spotMode === i ? '* ' : '  ') + label, 14, y, 2, fg, bg);
+      const active = i === MENU_WIFI ? wifiOn : spotMode === i;
+      print((active ? '* ' : '  ') + label, 14, y, 2, fg, bg);
     });
   }
   function openMenu() { menuOpen = true; menuSel = 0; fill(0, MENU_Y, W, MENU_H, BLACK); drawMenu(); }
@@ -464,8 +468,8 @@ code { font-family: var(--font-data); font-size: .88em; }
     drawHoldBadge();
   }
   function selectMenuItem() {
-    spotMode = menuSel;
-    if (frozen) drawThermal();
+    if (menuSel === MENU_WIFI) { wifiOn = !wifiOn; drawWifiLabel(); }
+    else { spotMode = menuSel; if (frozen) drawThermal(); }
     closeMenu();
   }
   function press(long) {
@@ -480,7 +484,7 @@ code { font-family: var(--font-data); font-size: .88em; }
   px.fill(BLACK);
   for (let i = 0; i < BAR_W; i++) fill(BAR_X + i, BAR_Y, 1, BAR_H, pal[(i * 255 / (BAR_W - 1)) | 0]);
   drawStaticPanel();
-  print('IR-Cam', 70, H - 14, 1, DARKGREY, BLACK);   // AP_SSID, drawn once in setup()
+  drawWifiLabel();
 
   // Warm up the smoothed values so the first still frame looks settled
   for (let i = 0; i < 12; i++) {

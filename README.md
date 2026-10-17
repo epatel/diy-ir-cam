@@ -117,15 +117,16 @@ freeze the current frame (a red `HOLD` appears bottom right); press it again
 to go live.
 
 Hold **BOOT** for about half a second to open the menu. A short press steps
-through *Spot off*, *Hot spot* and *Cold spot*; holding again selects
+through *Spot off*, *Hot spot*, *Cold spot* and *Wi-Fi*; holding again selects
 and closes the menu (it also closes by itself after 6 s). A `*` marks the
 current choice. Only one spot is shown at a time: the hottest (default) or
-the coldest, both marked with a cyan ring.
+the coldest, both marked with a cyan ring. *Wi-Fi* switches the access point
+on or off. The spot choice and Wi-Fi setting are remembered across restarts.
 
 ### Live view over Wi-Fi
 
 The camera runs its own open Wi-Fi network, **IR-Cam** (the name is shown at
-the bottom of the screen). Join it from a phone or laptop and the sign-in page
+the bottom of the screen while Wi-Fi is on). Join it from a phone or laptop and the sign-in page
 opens by itself with the live image, the readouts and the options (spot off /
 hot / cold, freeze, save image). If it doesn't, browse to
 `http://192.168.4.1`. Saving the image works best from a normal browser tab

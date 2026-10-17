@@ -18,6 +18,7 @@ static WebSnapshot snap;                  // latest frame, guarded by snapLock
 static uint32_t snapSeq = 0;
 static SemaphoreHandle_t snapLock;
 static volatile int spotRequest = -1, freezeRequest = -1;
+static volatile bool wantOn = false;
 
 static char json[6144];                   // 768 values of up to 6 chars + fields
 
@@ -63,28 +64,53 @@ static void handleOther() {
   server.send(302, "text/plain", "");
 }
 
-static void webTask(void *) {
-  for (;;) {
-    dns.processNextRequest();
-    server.handleClient();
-    delay(2);
-  }
-}
-
-void webBegin() {
-  snapLock = xSemaphoreCreateMutex();
+static void startAP() {
   WiFi.mode(WIFI_AP);
   WiFi.softAP(AP_SSID, AP_PASSWORD[0] ? AP_PASSWORD : nullptr);
   dns.start(53, "*", WiFi.softAPIP());
+  server.begin();
+}
 
+static void stopAP() {
+  server.stop();
+  dns.stop();
+  WiFi.softAPdisconnect(true);
+  WiFi.mode(WIFI_OFF);
+}
+
+// Starting and stopping happen here too, so the server is never torn down
+// while it is handling a request
+static void webTask(void *) {
+  bool on = false;
+  for (;;) {
+    if (wantOn != on) {
+      on = wantOn;
+      if (on) startAP(); else stopAP();
+    }
+    if (on) {
+      dns.processNextRequest();
+      server.handleClient();
+      delay(2);
+    } else {
+      delay(50);
+    }
+  }
+}
+
+void webBegin(bool enabled) {
+  snapLock = xSemaphoreCreateMutex();
   server.on("/", handleRoot);
   server.on("/frame.json", handleFrame);
   server.on("/set", handleSet);
   server.onNotFound(handleOther);
-  server.begin();
+  wantOn = enabled;
 
   // Same priority as loop(), so the two time-slice while loop() waits on I2C
   xTaskCreate(webTask, "web", 6144, nullptr, 1, nullptr);
+}
+
+void webSetEnabled(bool enabled) {
+  wantOn = enabled;
 }
 
 void webPublish(const WebSnapshot &s) {

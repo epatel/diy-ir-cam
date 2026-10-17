@@ -1,6 +1,7 @@
 // Wi-Fi access point with a captive-portal page showing the live image
 //
-// The server runs in its own FreeRTOS task. loop() hands it a copy of each
+// The server runs in its own FreeRTOS task, which also starts and stops the
+// access point when webSetEnabled() changes. loop() hands it a copy of each
 // frame with webPublish(), and picks up changes made on the page with the
 // webTake*() calls, so all drawing stays in loop().
 
@@ -18,7 +19,8 @@ struct WebSnapshot {
   bool frozen;
 };
 
-void webBegin();
+void webBegin(bool enabled);
+void webSetEnabled(bool enabled);  // AP on/off; applied by the web task
 void webPublish(const WebSnapshot &snap);
 int webTakeSpotRequest();     // -1 if none, else the requested SpotMode
 int webTakeFreezeRequest();   // -1 if none, else 0 or 1

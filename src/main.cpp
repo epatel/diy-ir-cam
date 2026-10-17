@@ -15,6 +15,7 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <Ticker.h>
+#include <Preferences.h>
 #include <Arduino_GFX_Library.h>
 #include <MLX90640_API.h>
 #include <MLX90640_I2C_Driver.h>
@@ -208,6 +209,40 @@ static bool frozen = false;
 // One spot marker at a time: none, the hottest or the coldest pixel
 enum SpotMode { SPOT_OFF, SPOT_HOT, SPOT_COLD };
 static SpotMode spotMode = SPOT_HOT;
+static bool wifiOn = true;
+
+// Spot mode and Wi-Fi survive a restart (NVS, written only when they change);
+// freeze does not. "ver" is the layout of the stored keys: bump
+// SETTINGS_VERSION when a key changes meaning, and add a step to
+// migrateSettings() that converts from the previous version.
+static const uint8_t SETTINGS_VERSION = 1;
+static Preferences prefs;
+
+static void saveSettings() {
+  prefs.putUChar("ver", SETTINGS_VERSION);
+  prefs.putUChar("spot", spotMode);
+  prefs.putBool("wifi", wifiOn);
+}
+
+static void migrateSettings() {
+  uint8_t ver = prefs.getUChar("ver", 0);
+  if (ver == SETTINGS_VERSION) return;
+  if (ver == 0 || ver > SETTINGS_VERSION) {  // nothing saved yet, or from newer firmware
+    prefs.clear();
+    saveSettings();                          // the defaults
+    return;
+  }
+  // Future steps go here, e.g. if (ver == 1) { ...convert...; ver = 2; }
+  prefs.putUChar("ver", SETTINGS_VERSION);
+}
+
+static void loadSettings() {
+  prefs.begin("ircam");
+  migrateSettings();
+  uint8_t m = prefs.getUChar("spot", SPOT_HOT);
+  spotMode = m <= SPOT_COLD ? (SpotMode)m : SPOT_HOT;
+  wifiOn = prefs.getBool("wifi", true);
+}
 
 static const int SPOT_X = (SCR_W - 10 * 12) / 2, SPOT_Y = 268;  // 10 chars at size 2
 
@@ -316,11 +351,12 @@ static void drawHoldBadge() {
 
 // ---------- Menu: long press opens, short press steps, long press selects ----------
 // Drawn over the centre/spot readouts; the image keeps running behind it.
-// The items are the spot modes, in SpotMode order; a '*' marks the current
-// one. Selecting sets that mode and closes the menu; it also closes after
-// MENU_TIMEOUT_MS without a press.
-static const int MENU_COUNT = 3;
-static const char *const MENU_LABELS[MENU_COUNT] = {"Spot off", "Hot spot", "Cold spot"};
+// The first items are the spot modes, in SpotMode order, then Wi-Fi; a '*'
+// marks the current spot mode and whether Wi-Fi is on. Selecting a spot mode
+// sets it, selecting Wi-Fi toggles it; either way the menu closes. It also
+// closes after MENU_TIMEOUT_MS without a press.
+static const int MENU_WIFI = 3, MENU_COUNT = 4;
+static const char *const MENU_LABELS[MENU_COUNT] = {"Spot off", "Hot spot", "Cold spot", "Wi-Fi"};
 static const int MENU_Y = 196, MENU_H = 102;   // between the min/max labels and HOLD
 static const uint32_t MENU_TIMEOUT_MS = 6000;
 static bool menuOpen = false;
@@ -336,7 +372,8 @@ static void drawMenu() {
     const uint16_t bg = i == menuSel ? RGB565_YELLOW : RGB565_BLACK;
     gfx->fillRect(4, y - 2, SCR_W - 8, 20, bg);
     gfx->setTextColor(fg, bg);
-    snprintf(buf, sizeof(buf), "%c %s", spotMode == i ? '*' : ' ', MENU_LABELS[i]);
+    const bool active = i == MENU_WIFI ? wifiOn : spotMode == i;
+    snprintf(buf, sizeof(buf), "%c %s", active ? '*' : ' ', MENU_LABELS[i]);
     gfx->setCursor(14, y); gfx->print(buf);
   }
 }
@@ -375,7 +412,10 @@ static void setFrozen(bool on) {
 }
 
 static void setSpotMode(SpotMode m) {
-  spotMode = m;
+  if (m != spotMode) {
+    spotMode = m;
+    saveSettings();
+  }
   if (frozen) {                        // show the change on the held frame
     drawThermal();
     if (!menuOpen) drawPanel(true);
@@ -383,8 +423,25 @@ static void setSpotMode(SpotMode m) {
   }
 }
 
+// The AP name on the fps line doubles as the Wi-Fi indicator
+static void drawWifiLabel() {
+  gfx->setTextSize(1);
+  gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
+  gfx->setCursor(70, SCR_H - 14);
+  if (wifiOn) gfx->print(AP_SSID);
+  else gfx->fillRect(70, SCR_H - 14, 6 * strlen(AP_SSID), 8, RGB565_BLACK);
+}
+
+static void setWifi(bool on) {
+  wifiOn = on;
+  webSetEnabled(on);
+  drawWifiLabel();
+  saveSettings();
+}
+
 static void selectMenuItem() {
-  setSpotMode((SpotMode)menuSel);
+  if (menuSel == MENU_WIFI) setWifi(!wifiOn);
+  else setSpotMode((SpotMode)menuSel);
   closeMenu();
 }
 
@@ -465,11 +522,9 @@ void setup() {
   pinMode(BTN_HOLD, INPUT_PULLUP);
   buttonTicker.attach_ms(BTN_TICK_MS, pollButton);
 
-  webBegin();
-  gfx->setTextSize(1);
-  gfx->setTextColor(RGB565_DARKGREY, RGB565_BLACK);
-  gfx->setCursor(70, SCR_H - 14);
-  gfx->print(AP_SSID);
+  loadSettings();
+  webBegin(wifiOn);
+  drawWifiLabel();
 
   Serial.println("Thermal camera ready");
 }

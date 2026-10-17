@@ -22,9 +22,9 @@ Screen layout, rendering pipeline and drawing conventions in `src/main.cpp`.
 | Centre temp | x 20, y 222, size 4 + "C" size 2 | smoothed (EMA 0.25) |
 | Spot temp | x 26, y 268, size 2, cyan, `hot  ` / `cold ` prefix | raw hottest or coldest pixel; blanked when spot is off |
 | fps | x 10, y 306, size 1, dark grey | |
-| SSID | x 70, y 306, size 1, dark grey | `AP_SSID`, static, drawn once in `setup()` |
+| SSID | x 70, y 306, size 1, dark grey | `AP_SSID`, only while Wi-Fi is on (`drawWifiLabel()`) |
 | HOLD badge | bottom right, size 2, red | only while frozen |
-| Menu | y 196–297, replaces centre/spot readouts | three rows size 2 at y 202/224/246, text x 14; selected row black on yellow; `*` marks the current state |
+| Menu | y 196–297, replaces centre/spot readouts | four rows size 2 at y 202/224/246/268, text x 14; selected row black on yellow; `*` marks the current state |
 
 Text uses the built-in 5×7 font in 6×8 cells × size, printed with `setTextColor(fg, bg)` so each update overwrites the previous value. Numbers are fixed-width (`%5.1f`) so stale digits never remain.
 
@@ -51,6 +51,10 @@ Measured per full frame (earlier 224×168 image, 8 Hz): render 9 ms, LCD push 20
 BOOT (GPIO9) is the only button. `loop()` blocks in `readFrame()` for most of each frame, so `pollButton()` samples it every 5 ms from a `Ticker`. A press counts after 8 consecutive low samples (40 ms) and must see 8 high samples before re-arming. Held 600 ms → `longPress` fires immediately (while still held); released earlier → `shortPress` on release. An earlier edge-interrupt + 200 ms lockout double-toggled on release bounce when the button was held longer than 200 ms.
 
 - Outside the menu: short press toggles freeze (HOLD), long press opens the menu.
-- In the menu: short press steps through Spot off / Hot spot / Cold spot (exclusive; same order as `SpotMode`); long press selects that mode and closes the menu. It also closes after 6 s without a press. Freeze isn't in the menu; the short press covers it.
+- In the menu: short press steps through Spot off / Hot spot / Cold spot (exclusive; same order as `SpotMode`) / Wi-Fi (toggle); long press selects and closes the menu. It also closes after 6 s without a press. Freeze isn't in the menu; the short press covers it.
 - Events are handled once per `loop()`, i.e. up to one frame (~125 ms) late while live, every 20 ms while frozen.
-- Default spot mode: hot.
+- Default spot mode: hot; Wi-Fi on.
+
+## Saved settings
+
+Spot mode and Wi-Fi are stored with `Preferences` (NVS namespace `ircam`, keys `ver`, `spot`, `wifi`), written by `saveSettings()` only when they change. Freeze is not saved. `loadSettings()` in `setup()` runs `migrateSettings()` first: `ver` is `SETTINGS_VERSION` (now 1); a missing `ver` (first boot) or one from newer firmware resets to defaults. When a stored key changes meaning, bump `SETTINGS_VERSION` and add a conversion step from the previous version there instead of clearing.
