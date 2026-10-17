@@ -40,23 +40,19 @@ GPIO0 and GPIO1 are the ESP32-C6's optional 32 kHz crystal pins. This board
 has no 32 kHz crystal, and they aren't strapping pins, so they're free for I²C.
 
 ```mermaid
-flowchart LR
-  subgraph MLX["Pimoroni MLX90640"]
-    V[3-6V]
-    SDA
-    SCL
-    G[GND]
-  end
-  subgraph H["ESP32-C6 header, pins 11-14"]
-    P11[11 GND]
-    P12[12 3V3]
-    P13[13 IO0]
-    P14[14 IO1]
-  end
+block-beta
+  columns 3
+  MLX["Pimoroni MLX90640"] space H["ESP32-C6 header, pins 11-14"]
+  V["3-6V"] space P11["11 GND"]
+  SDA space P12["12 3V3"]
+  SCL space P13["13 IO0"]
+  G["GND"] space P14["14 IO1"]
   V --- P12
-  G --- P11
   SDA --- P13
   SCL --- P14
+  G --- P11
+  classDef title fill:none,stroke:none,font-weight:bold
+  class MLX,H title
 ```
 
 Power the breakout from **3V3, not 5V**: its I²C pull-ups go to its supply, so
