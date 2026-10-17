@@ -24,7 +24,8 @@ Screen layout, rendering pipeline and drawing conventions in `src/main.cpp`.
 | fps | x 10, y 306, size 1, dark grey | |
 | SSID | x 70, y 306, size 1, dark grey | `AP_SSID`, only while Wi-Fi is on (`drawWifiLabel()`) |
 | HOLD badge | bottom right, size 2, red | only while frozen |
-| Menu | y 196–297, replaces centre/spot readouts | four rows size 2 at y 202/224/246/268, text x 14; selected row black on yellow; `*` marks the current state |
+| Message | spot line (x 26, y 268), size 2, 10 chars | `saved nnnn` green / `no SD card` red for 2 s (`showMessage()`, `msgUntilMs`); `drawPanel()` leaves it up, `handleButton()` restores the spot line after |
+| Menu | y 196–297, replaces centre/spot readouts | five rows size 2, 18 px apart from y 202, text x 14; selected row black on yellow; `*` marks the current state |
 
 Text uses the built-in 5×7 font in 6×8 cells × size, printed with `setTextColor(fg, bg)` so each update overwrites the previous value. Numbers are fixed-width (`%5.1f`) so stale digits never remain.
 
@@ -32,7 +33,8 @@ Text uses the built-in 5×7 font in 6×8 cells × size, printed with `setTextCol
 
 ## Per-frame pipeline (`loop()`)
 
-1. `handleButton()` and `handleWeb()` act on button events and web-page requests (freeze, menu, spot mode); while frozen, return early so the last frame stays.
+0. `loop()` holds `spiBusLock()` throughout except during `readFrame()`, because the SD card shares the LCD's SPI bus ([sdcard](sdcard.md)).
+1. `handleButton()` and `handleWeb()` act on button events and web-page requests (freeze, menu, spot mode, save); while frozen, return early so the last frame stays.
 2. `readFrame()`: two subpages → `frame[768]` in °C, sensor order.
 3. Frame min/max → enforce ≥ 5 °C span → smooth range 30 % per frame.
 4. Centre = mean of the 4 middle pixels, EMA-smoothed. Spot (in `drawThermal()`) = max or min pixel per `spotMode`, refined by a 3×3 weighted centroid (pixels within 2 °C of the extreme); `findSpot(±1)`.
@@ -51,7 +53,7 @@ Measured per full frame (earlier 224×168 image, 8 Hz): render 9 ms, LCD push 20
 BOOT (GPIO9) is the only button. `loop()` blocks in `readFrame()` for most of each frame, so `pollButton()` samples it every 5 ms from a `Ticker`. A press counts after 8 consecutive low samples (40 ms) and must see 8 high samples before re-arming. Held 600 ms → `longPress` fires immediately (while still held); released earlier → `shortPress` on release. An earlier edge-interrupt + 200 ms lockout double-toggled on release bounce when the button was held longer than 200 ms.
 
 - Outside the menu: short press toggles freeze (HOLD), long press opens the menu.
-- In the menu: short press steps through Spot off / Hot spot / Cold spot (exclusive; same order as `SpotMode`) / Wi-Fi (toggle); long press selects and closes the menu. It also closes after 6 s without a press. Freeze isn't in the menu; the short press covers it.
+- In the menu: short press steps through Save / Spot off / Hot spot / Cold spot (exclusive; `SpotMode` order, offset by `MENU_SPOT`) / Wi-Fi (toggle); long press closes the menu and acts. Save is first so hold, hold takes a snapshot ([sdcard](sdcard.md)). It also closes after 6 s without a press. Freeze isn't in the menu; the short press covers it.
 - Events are handled once per `loop()`, i.e. up to one frame (~125 ms) late while live, every 20 ms while frozen.
 - Default spot mode: hot; Wi-Fi on.
 

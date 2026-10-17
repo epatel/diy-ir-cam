@@ -8,7 +8,8 @@
 // Screen layout (portrait 172x320, held upright):
 //   172x129 thermal image on top, colour bar + min/max, large centre temp.
 // Also a Wi-Fi access point ("IR-Cam") whose sign-in page shows the live
-// image and the options; see web.cpp.
+// image and the options; see web.cpp. Snapshots go to the microSD card
+// (menu item Save, or the web page); see sdcard.cpp.
 // The sensor's 32-pixel side runs along the board's short edge, so in
 // portrait the native 32x24 image fits without rotating it.
 
@@ -20,6 +21,7 @@
 #include <MLX90640_API.h>
 #include <MLX90640_I2C_Driver.h>
 #include "web.h"
+#include "sdcard.h"
 
 // ---------- Pins (from Waveshare schematic) ----------
 #define LCD_MOSI 6
@@ -246,6 +248,10 @@ static void loadSettings() {
 
 static const int SPOT_X = (SCR_W - 10 * 12) / 2, SPOT_Y = 268;  // 10 chars at size 2
 
+// A short message ("saved 0007") replaces the spot readout for MSG_MS
+static const uint32_t MSG_MS = 2000;
+static uint32_t msgUntilMs = 0;
+
 static void drawStaticPanel() {
   gfx->setTextSize(1);
   gfx->setTextColor(RGB565_YELLOW, RGB565_BLACK);
@@ -280,7 +286,9 @@ static void drawPanel(bool readouts) {
     gfx->setTextSize(2);
     gfx->setCursor(20 + 5 * 24, 222); gfx->print("C");
 
-    if (spotMode == SPOT_OFF) {
+    if (msgUntilMs) {
+      // leave the message up
+    } else if (spotMode == SPOT_OFF) {
       gfx->fillRect(SPOT_X, SPOT_Y, 10 * 12, 16, RGB565_BLACK);
     } else {
       const bool hot = spotMode == SPOT_HOT;
@@ -351,12 +359,14 @@ static void drawHoldBadge() {
 
 // ---------- Menu: long press opens, short press steps, long press selects ----------
 // Drawn over the centre/spot readouts; the image keeps running behind it.
-// The first items are the spot modes, in SpotMode order, then Wi-Fi; a '*'
-// marks the current spot mode and whether Wi-Fi is on. Selecting a spot mode
-// sets it, selecting Wi-Fi toggles it; either way the menu closes. It also
-// closes after MENU_TIMEOUT_MS without a press.
-static const int MENU_WIFI = 3, MENU_COUNT = 4;
-static const char *const MENU_LABELS[MENU_COUNT] = {"Spot off", "Hot spot", "Cold spot", "Wi-Fi"};
+// Save comes first, so hold-hold takes a snapshot; then the spot modes, in
+// SpotMode order, then Wi-Fi. A '*' marks the current spot mode and whether
+// Wi-Fi is on. Selecting Save saves, a spot mode sets it, Wi-Fi toggles it;
+// any of them closes the menu. It also closes after MENU_TIMEOUT_MS without
+// a press.
+static const int MENU_SAVE = 0, MENU_SPOT = 1, MENU_WIFI = 4, MENU_COUNT = 5;
+static const char *const MENU_LABELS[MENU_COUNT] = {"Save", "Spot off", "Hot spot", "Cold spot", "Wi-Fi"};
+static const int MENU_PITCH = 18;
 static const int MENU_Y = 196, MENU_H = 102;   // between the min/max labels and HOLD
 static const uint32_t MENU_TIMEOUT_MS = 6000;
 static bool menuOpen = false;
@@ -367,12 +377,12 @@ static void drawMenu() {
   char buf[16];
   gfx->setTextSize(2);
   for (int i = 0; i < MENU_COUNT; i++) {
-    const int y = MENU_Y + 6 + i * 22;
+    const int y = MENU_Y + 6 + i * MENU_PITCH;
     const uint16_t fg = i == menuSel ? RGB565_BLACK : RGB565_WHITE;
     const uint16_t bg = i == menuSel ? RGB565_YELLOW : RGB565_BLACK;
-    gfx->fillRect(4, y - 2, SCR_W - 8, 20, bg);
+    gfx->fillRect(4, y - 1, SCR_W - 8, MENU_PITCH, bg);
     gfx->setTextColor(fg, bg);
-    const bool active = i == MENU_WIFI ? wifiOn : spotMode == i;
+    const bool active = i == MENU_SAVE ? false : i == MENU_WIFI ? wifiOn : spotMode == i - MENU_SPOT;
     snprintf(buf, sizeof(buf), "%c %s", active ? '*' : ' ', MENU_LABELS[i]);
     gfx->setCursor(14, y); gfx->print(buf);
   }
@@ -392,6 +402,9 @@ static void closeMenu() {
   drawPanel(true);
 }
 
+static uint16_t saveSeq = 0;            // counts save attempts, for the web page
+static int16_t savedNum = 0;            // last snapshot number, -1 if that save failed
+
 // Hand the web page a copy of the current state, after every frame and
 // after any change made while frozen
 static void publishWeb() {
@@ -402,6 +415,8 @@ static void publishWeb() {
   s.spotT = spotT; s.spotX = spotX; s.spotY = spotY; s.fps = fps;
   s.spotMode = spotMode;
   s.frozen = frozen;
+  s.saveSeq = saveSeq;
+  s.savedNum = savedNum;
   webPublish(s);
 }
 
@@ -439,10 +454,35 @@ static void setWifi(bool on) {
   saveSettings();
 }
 
+static void showMessage(const char *text, uint16_t colour) {
+  if (menuOpen) return;                // the menu covers the spot line
+  char buf[16];
+  snprintf(buf, sizeof(buf), "%-10s", text);
+  gfx->setTextSize(2);
+  gfx->setTextColor(colour, RGB565_BLACK);
+  gfx->setCursor(SPOT_X, SPOT_Y); gfx->print(buf);
+  msgUntilMs = millis() + MSG_MS;
+}
+
+// The current (or frozen) frame to the SD card, as shown on screen
+static void saveSnapshot() {
+  static float t[SENS_W * SENS_H];      // display orientation
+  for (int y = 0; y < SENS_H; y++)
+    for (int x = 0; x < SENS_W; x++) t[y * SENS_W + x] = px(x, y);
+  savedNum = sdSave(imgBuf, IMG_W, IMG_H, t, SENS_W, SENS_H);
+  saveSeq++;
+  char buf[16];
+  if (savedNum >= 0) snprintf(buf, sizeof(buf), "saved %04d", savedNum);
+  showMessage(savedNum >= 0 ? buf : "no SD card", savedNum >= 0 ? RGB565_GREEN : RGB565_RED);
+  publishWeb();
+}
+
 static void selectMenuItem() {
-  if (menuSel == MENU_WIFI) setWifi(!wifiOn);
-  else setSpotMode((SpotMode)menuSel);
+  const int sel = menuSel;
   closeMenu();
+  if (sel == MENU_SAVE) saveSnapshot();
+  else if (sel == MENU_WIFI) setWifi(!wifiOn);
+  else setSpotMode((SpotMode)(sel - MENU_SPOT));
 }
 
 // Changes made on the web page
@@ -454,6 +494,7 @@ static void handleWeb() {
   }
   v = webTakeFreezeRequest();
   if (v >= 0 && (bool)v != frozen) setFrozen(v);
+  if (webTakeSaveRequest()) saveSnapshot();
 }
 
 // Outside the menu a short press still toggles freeze directly
@@ -474,6 +515,11 @@ static void handleButton() {
   } else if (millis() - menuLastMs > MENU_TIMEOUT_MS) {
     closeMenu();
   }
+
+  if (msgUntilMs && (int32_t)(millis() - msgUntilMs) >= 0) {
+    msgUntilMs = 0;
+    if (!menuOpen) drawPanel(true);    // back to the spot readout
+  }
 }
 
 static void fatal(const char *msg) {
@@ -490,10 +536,12 @@ void setup() {
 
   pinMode(LCD_BL, OUTPUT);
   digitalWrite(LCD_BL, HIGH);
+  spiBusInit();
 
   if (!gfx->begin(80000000)) Serial.println("gfx->begin() failed");
   gfx->setRotation(SCREEN_ROTATION);  // portrait 172x320
   gfx->fillScreen(RGB565_BLACK);
+  sdBegin(LCD_SCLK, LCD_MOSI);        // after gfx->begin(), which resets the SPI peripheral
 
   buildPalette();
   buildTaps(tapX, IMG_W, SENS_W);
@@ -542,12 +590,16 @@ static bool readFrame() {
   return true;
 }
 
+// loop() holds the SPI bus (LCD and SD card) except while it waits on the
+// sensor, which is when the web task gets to read the card
 void loop() {
   static uint32_t lastMs = 0;
 
+  spiBusLock();
   const bool wasFrozen = frozen;
   handleButton();
   handleWeb();
+  spiBusUnlock();
   if (wasFrozen && !frozen) lastMs = 0;  // don't count the pause in the fps
   if (frozen) {                          // leave the last frame on screen
     delay(20);
@@ -559,6 +611,7 @@ void loop() {
     delay(100);
     return;
   }
+  spiBusLock();
 
   float tMin = 1e6, tMax = -1e6;
   for (float t : frame) {
@@ -585,4 +638,5 @@ void loop() {
 
   drawPanel(!menuOpen);
   publishWeb();
+  spiBusUnlock();
 }

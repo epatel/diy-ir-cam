@@ -222,7 +222,8 @@ code { font-family: var(--font-data); font-size: .88em; }
             <tr><td>Frame rate</td><td>~7.9 fps (sensor at 16 Hz subpages)</td></tr>
             <tr><td>Wi-Fi</td><td>open AP “IR-Cam”, live page at 192.168.4.1</td></tr>
             <tr><td>HOLD</td><td>BOOT short press, 40 ms debounce</td></tr>
-            <tr><td>Menu</td><td>hold BOOT 0.6 s; short steps, hold selects: spot off / hot / cold, Wi-Fi on/off</td></tr>
+            <tr><td>Menu</td><td>hold BOOT 0.6 s; short steps, hold selects: save to SD, spot off / hot / cold, Wi-Fi on/off</td></tr>
+            <tr><td>Save</td><td>IMG_nnnn.png + .csv in /ircam on the microSD card; “saved nnnn” for 2 s</td></tr>
           </table>
         </div>
       </section>
@@ -251,7 +252,7 @@ code { font-family: var(--font-data); font-size: .88em; }
     return (255 << 24) | (b << 16) | (g << 8) | r;
   };
   const WHITE = rgb(255,255,255), BLACK = rgb(0,0,0), YELLOW = rgb(255,255,0),
-        DARKGREY = rgb(128,128,128), CYAN = rgb(0,255,255), RED = rgb(255,0,0);
+        DARKGREY = rgb(128,128,128), CYAN = rgb(0,255,255), RED = rgb(255,0,0), GREEN = rgb(0,255,0);
 
   // Same ironbow stops as buildPalette()
   const stops = [[0,0,0,0],[.15,32,0,140],[.35,145,0,160],[.55,230,50,50],[.75,250,150,0],[.9,255,230,60],[1,255,255,255]];
@@ -274,6 +275,7 @@ code { font-family: var(--font-data); font-size: .88em; }
     'o':[0x38,0x44,0x44,0x44,0x38],'f':[0x08,0x7E,0x09,0x01,0x02],'p':[0x7C,0x14,0x14,0x14,0x08],
     's':[0x48,0x54,0x54,0x54,0x20],'C':[0x3E,0x41,0x41,0x41,0x22],'H':[0x7F,0x08,0x08,0x08,0x7F],
     'O':[0x3E,0x41,0x41,0x41,0x3E],'l':[0x00,0x41,0x7F,0x40,0x00],'d':[0x38,0x44,0x44,0x48,0x7F],'F':[0x7F,0x09,0x09,0x09,0x01],'z':[0x44,0x64,0x54,0x4C,0x44],'m':[0x7C,0x04,0x18,0x04,0x78],'u':[0x3C,0x40,0x40,0x20,0x7C],'*':[0x08,0x2A,0x1C,0x2A,0x08],'I':[0x00,0x41,0x7F,0x41,0x00],'R':[0x7F,0x09,0x19,0x29,0x46],'a':[0x20,0x54,0x54,0x54,0x78],'W':[0x3F,0x40,0x38,0x40,0x3F],'i':[0x00,0x44,0x7D,0x40,0x00],'L':[0x7F,0x40,0x40,0x40,0x40],'D':[0x7F,0x41,0x41,0x22,0x1C],
+    'S':[0x46,0x49,0x49,0x49,0x31],'v':[0x1C,0x20,0x40,0x20,0x1C],
     ' ':[0,0,0,0,0]
   };
   const fill = (x, y, w, h, c) => {
@@ -405,7 +407,8 @@ code { font-family: var(--font-data); font-size: .88em; }
     if (readouts) {
       print(right(f51(sCenter), 5), 20, 222, 4, YELLOW, BLACK);
       print('C', 20 + 5 * 24, 222, 2, YELLOW, BLACK);
-      if (spotMode === 0) fill(SPOT_X, SPOT_Y, 120, 16, BLACK);
+      if (msgUntilMs) { /* leave the message up */ }
+      else if (spotMode === 0) fill(SPOT_X, SPOT_Y, 120, 16, BLACK);
       else print((spotMode === 1 ? 'hot  ' : 'cold ') + right(f51(spotT), 5), SPOT_X, SPOT_Y, 2, CYAN, BLACK);
     }
     print(fps.toFixed(1) + ' fps ', BAR_X, H - 14, 1, DARKGREY, BLACK);
@@ -447,15 +450,16 @@ code { font-family: var(--font-data); font-size: .88em; }
   }
 
   // Menu, same as the firmware: long press opens, short steps, long selects
-  const MENU_LABELS = ['Spot off', 'Hot spot', 'Cold spot', 'Wi-Fi'], MENU_WIFI = 3;
-  let wifiOn = true;
+  const MENU_LABELS = ['Save', 'Spot off', 'Hot spot', 'Cold spot', 'Wi-Fi'];
+  const MENU_SAVE = 0, MENU_SPOT = 1, MENU_WIFI = 4, MENU_PITCH = 18;
+  let wifiOn = true, savedNum = 0, msgUntilMs = 0;
   const MENU_Y = 196, MENU_H = 102, MENU_TIMEOUT_MS = 6000;
   function drawMenu() {
     MENU_LABELS.forEach((label, i) => {
-      const y = MENU_Y + 6 + i * 22, sel = i === menuSel;
+      const y = MENU_Y + 6 + i * MENU_PITCH, sel = i === menuSel;
       const fg = sel ? BLACK : WHITE, bg = sel ? YELLOW : BLACK;
-      fill(4, y - 2, W - 8, 20, bg);
-      const active = i === MENU_WIFI ? wifiOn : spotMode === i;
+      fill(4, y - 1, W - 8, MENU_PITCH, bg);
+      const active = i === MENU_SAVE ? false : i === MENU_WIFI ? wifiOn : spotMode === i - MENU_SPOT;
       print((active ? '* ' : '  ') + label, 14, y, 2, fg, bg);
     });
   }
@@ -467,10 +471,18 @@ code { font-family: var(--font-data); font-size: .88em; }
     boot.setAttribute('aria-pressed', String(v));
     drawHoldBadge();
   }
+  // Like saveSnapshot(): the mockup has no card, so it just counts
+  function saveSnapshot() {
+    savedNum++;
+    print(('saved ' + String(savedNum).padStart(4, '0')).padEnd(10), SPOT_X, SPOT_Y, 2, GREEN, BLACK);
+    msgUntilMs = performance.now() + 2000;
+  }
   function selectMenuItem() {
-    if (menuSel === MENU_WIFI) { wifiOn = !wifiOn; drawWifiLabel(); }
-    else { spotMode = menuSel; if (frozen) drawThermal(); }
+    const sel = menuSel;
     closeMenu();
+    if (sel === MENU_SAVE) saveSnapshot();
+    else if (sel === MENU_WIFI) { wifiOn = !wifiOn; drawWifiLabel(); }
+    else { spotMode = sel - MENU_SPOT; if (frozen) { drawThermal(); drawPanel(true); } }
   }
   function press(long) {
     menuLastMs = performance.now();
@@ -499,6 +511,7 @@ code { font-family: var(--font-data); font-size: .88em; }
   if (matchMedia('(prefers-reduced-motion: reduce)').matches) { setFrozen(true); show(); }
   setInterval(() => {
     if (menuOpen && performance.now() - menuLastMs > MENU_TIMEOUT_MS) { closeMenu(); show(); }
+    if (msgUntilMs && performance.now() >= msgUntilMs) { msgUntilMs = 0; if (!menuOpen) { drawPanel(true); show(); } }
     if (!frozen) step(performance.now());
   }, 1000 / FPS);
 

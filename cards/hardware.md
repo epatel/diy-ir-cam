@@ -40,7 +40,7 @@ Free for new uses: IO2, IO3, IO18, IO19, IO20, IO23.
 ## On-board, not on headers
 
 - LCD: MOSI 6, SCLK 7, CS 14, DC 15, RST 21, backlight 22 (via MOSFET, high = on).
-- microSD: CS 4, MISO 5, shares MOSI 6 / SCLK 7 with the LCD.
+- microSD: CS 4, MISO 5, shares MOSI 6 / SCLK 7 with the LCD. Used for snapshots; see [sdcard](sdcard.md) for sharing the bus.
 - RGB LED: GPIO8 (also a strapping pin).
 - BOOT button: GPIO9, external 10k pull-up, pressed = low. Used as the freeze button.
 

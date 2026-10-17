@@ -82,7 +82,7 @@ end of the header is pin 10 (5V) before soldering.
 | 12 | 3V3 | MLX90640 power |
 | 13–14 | IO0, IO1 | MLX90640 SDA, SCL |
 | 15–16 | IO2, IO3 | free |
-| 17–18 | IO4, IO5 | microSD CS, MISO, avoid |
+| 17–18 | IO4, IO5 | microSD CS, MISO (used for snapshots) |
 
 On-board, not on the headers: LCD on GPIO6 (MOSI), 7 (SCLK), 14 (CS), 15 (DC),
 21 (RST), 22 (backlight); RGB LED (WS2812) on GPIO8.
@@ -117,18 +117,28 @@ freeze the current frame (a red `HOLD` appears bottom right); press it again
 to go live.
 
 Hold **BOOT** for about half a second to open the menu. A short press steps
-through *Spot off*, *Hot spot*, *Cold spot* and *Wi-Fi*; holding again selects
+through *Save*, *Spot off*, *Hot spot*, *Cold spot* and *Wi-Fi*; holding again selects
 and closes the menu (it also closes by itself after 6 s). A `*` marks the
 current choice. Only one spot is shown at a time: the hottest (default) or
 the coldest, both marked with a cyan ring. *Wi-Fi* switches the access point
 on or off. The spot choice and Wi-Fi setting are remembered across restarts.
+
+### Snapshots on the microSD card
+
+*Save* is the first menu item, so holding BOOT twice saves a snapshot (freeze
+first to pick the moment). It writes two files to `/ircam` on the card:
+`IMG_0001.png`, the image as shown on screen, and `IMG_0001.csv`, the 32×24
+temperatures in °C. The screen shows `saved 0001`, or `no SD card`. The card
+must be FAT32; cards of 64 GB and up usually come as exFAT and need
+reformatting.
 
 ### Live view over Wi-Fi
 
 The camera runs its own open Wi-Fi network, **IR-Cam** (the name is shown at
 the bottom of the screen while Wi-Fi is on). Join it from a phone or laptop and the sign-in page
 opens by itself with the live image, the readouts and the options (spot off /
-hot / cold, freeze, save image). If it doesn't, browse to
+hot / cold, freeze, save to SD, save PNG), plus the snapshots on the SD card
+to download or delete. If it doesn't, browse to
 `http://192.168.4.1`. Saving the image works best from a normal browser tab
 rather than the sign-in window. The network has no internet access. To give it
 a password, set `AP_PASSWORD` in `src/web.h`.

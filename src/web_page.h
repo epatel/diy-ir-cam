@@ -1,7 +1,8 @@
 // The page served at "/" (the captive-portal sign-in page). Self-contained:
 // no external files, since the phone has no internet on the camera's network.
-// It draws the 32x24 frame with the same ironbow palette as the screen and
-// sends option changes to /set.
+// It draws the 32x24 frame with the same ironbow palette as the screen,
+// sends option changes to /set, and lists the SD card snapshots
+// (/files.json, /file, /save, /delete).
 
 #pragma once
 
@@ -32,10 +33,19 @@ canvas{display:block;width:100%;height:auto}
 .seg button+button{border-left:1px solid var(--line)}
 button{font:inherit;color:var(--text);background:var(--panel);border:0;padding:11px 8px;cursor:pointer}
 button[aria-pressed=true]{background:var(--accent);color:#000;font-weight:600}
-.row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px}
+.row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
 .row button{border:1px solid var(--line);border-radius:8px}
 #freeze[aria-pressed=true]{background:var(--hold);color:#fff}
 .status{color:var(--muted);font-size:12px;margin-top:14px;min-height:1.4em}
+#files{list-style:none;margin:0;padding:0;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+#files li{display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--panel)}
+#files li+li{border-top:1px solid var(--line)}
+#files .n{flex:1;font-variant-numeric:tabular-nums}
+#files .s{color:var(--muted);font-size:12px}
+#files a{color:var(--accent);text-decoration:none}
+#files button{padding:4px 8px;border:1px solid var(--line);border-radius:6px;font-size:13px}
+#files button.sure{background:var(--hold);color:#fff}
+#files .empty{color:var(--muted)}
 </style></head><body><main>
 <h1>IR-Cam <small id="fps">connecting</small></h1>
 <div class="view"><canvas id="img" width="640" height="480"></canvas><div class="badge" id="hold">HOLD</div></div>
@@ -51,9 +61,12 @@ button[aria-pressed=true]{background:var(--accent);color:#000;font-weight:600}
 </div>
 <div class="row">
   <button id="freeze" aria-pressed="false">Freeze</button>
-  <button id="save">Save image</button>
+  <button id="sdsave">Save to SD</button>
+  <button id="save">Save PNG</button>
 </div>
 <div class="status" id="status"></div>
+<div class="label">Snapshots on the SD card</div>
+<ul id="files"><li class="empty">Loading…</li></ul>
 </main>
 <script>
 (()=>{
@@ -68,7 +81,7 @@ pal.forEach((c,i)=>bd.data.set([...c,255],i*4));bar.putImageData(bd,0,0);
 const small=document.createElement('canvas');small.width=SW;small.height=SH;
 const sctx=small.getContext('2d'),sd=sctx.createImageData(SW,SH);
 const cv=$('img'),ctx=cv.getContext('2d'),W=cv.width,H=cv.height;
-let last=null,lastSeq=-1,busy=false;
+let last=null,lastSeq=-1,busy=false,saveSeq=null;
 
 function draw(f){
   const k=255/Math.max(f.max-f.min,1);
@@ -99,7 +112,12 @@ async function poll(){
   try{
     const r=await fetch('/frame.json',{cache:'no-store'});const f=await r.json();
     if(f.seq!==lastSeq){lastSeq=f.seq;last=f;draw(f);}
-    sync(f);$('status').textContent='';setTimeout(poll,80);
+    sync(f);
+    if(f.saveSeq!==saveSeq){
+      if(saveSeq!==null)$('status').textContent=f.saved>=0?'Saved IMG_'+String(f.saved).padStart(4,'0'):'Could not save: no SD card, or it is full';
+      saveSeq=f.saveSeq;files();
+    }else if($('status').textContent.startsWith('Lost'))$('status').textContent='';
+    setTimeout(poll,80);
   }catch(e){$('status').textContent='Lost connection to the camera, retrying…';$('fps').textContent='offline';setTimeout(poll,1000);}
 }
 async function set(q){if(busy)return;busy=true;try{await fetch('/set?'+q,{cache:'no-store'});}catch(e){}busy=false;}
@@ -111,6 +129,32 @@ $('save').onclick=()=>{
   document.body.appendChild(a);a.click();a.remove();
   $('status').textContent='If nothing downloaded, open http://192.168.4.1 in the browser instead of the sign-in window.';
 };
+$('sdsave').onclick=()=>fetch('/save',{method:'POST'}).catch(()=>{});
+
+// One row per snapshot (IMG_nnnn.png + .csv), newest first
+async function files(){
+  let list;
+  try{list=await (await fetch('/files.json',{cache:'no-store'})).json();}catch(e){return;}
+  const g={};
+  list.forEach(f=>{const m=/^(.+)\.(png|bmp|csv)$/i.exec(f.n);if(m)(g[m[1]]=g[m[1]]||{})[m[2].toLowerCase()]=f;});
+  const ul=$('files');ul.textContent='';
+  const names=Object.keys(g).sort().reverse();
+  if(!names.length){const li=document.createElement('li');li.className='empty';li.textContent='None yet';ul.append(li);}
+  names.forEach(n=>{
+    const li=document.createElement('li'),el=(t,c,txt)=>{const e=document.createElement(t);if(c)e.className=c;if(txt)e.textContent=txt;li.append(e);return e;};
+    el('span','n',n);
+    const kb=Object.values(g[n]).reduce((a,f)=>a+f.s,0)/1024;
+    el('span','s',kb.toFixed(0)+' KB');
+    ['png','bmp','csv'].forEach(x=>{if(g[n][x]){const a=el('a','',x.toUpperCase());a.href='/file?name='+encodeURIComponent(g[n][x].n);a.download=g[n][x].n;}});
+    const del=el('button','','Delete');
+    del.onclick=async()=>{
+      if(!del.classList.contains('sure')){del.classList.add('sure');del.textContent='Sure?';setTimeout(()=>{del.classList.remove('sure');del.textContent='Delete';},3000);return;}
+      try{await fetch('/delete?name='+encodeURIComponent(n),{method:'POST'});}catch(e){}
+      files();
+    };
+    ul.append(li);
+  });
+}
 poll();
 })();
 </script></body></html>)HTML";
