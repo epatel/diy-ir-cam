@@ -1,3 +1,5 @@
+<a href="https://claude.ai"><img src="made-with-claude.png" height="32" alt="Made with Claude"></a>
+
 # DIY IR Camera
 
 A pocket thermal camera built from a Waveshare ESP32-C6-LCD-1.47 board and a
