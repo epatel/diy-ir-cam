@@ -127,7 +127,8 @@ on or off. The spot choice and Wi-Fi setting are remembered across restarts.
 
 *Save* is the first menu item, so holding BOOT twice saves a snapshot (freeze
 first to pick the moment). It writes two files to `/ircam` on the card:
-`IMG_0001.png`, the image as shown on screen, and `IMG_0001.csv`, the 32×24
+`IMG_0001.png`, the image as shown on screen with the readings in a strip
+below it (range, centre and the spot, if one is on), and `IMG_0001.csv`, the 32×24
 temperatures in °C. The screen shows `saved 0001`, or `no SD card`. The card
 must be FAT32; cards of 64 GB and up usually come as exFAT and need
 reformatting.

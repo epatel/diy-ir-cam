@@ -464,12 +464,47 @@ static void showMessage(const char *text, uint16_t colour) {
   msgUntilMs = millis() + MSG_MS;
 }
 
-// The current (or frozen) frame to the SD card, as shown on screen
+// Strip under the image in saved PNGs: colour bar, min/max, centre and the
+// spot, like the screen. Drawn into a canvas in RAM, so it never touches SPI.
+static const int FOOT_H = 35;
+static Arduino_Canvas *footer;          // IMG_W x FOOT_H, framebuffer only
+
+static void drawFooter() {
+  char buf[24];
+  footer->fillScreen(RGB565_BLACK);
+  for (int i = 0; i < BAR_W; i++)
+    footer->drawFastVLine(BAR_X + i, 3, 6, palette[i * 255 / (BAR_W - 1)]);
+  footer->setTextSize(1);
+  footer->setTextColor(RGB565_WHITE, RGB565_BLACK);
+  snprintf(buf, sizeof(buf), "%.1f C", sMin);
+  footer->setCursor(BAR_X, 13); footer->print(buf);
+  snprintf(buf, sizeof(buf), "%.1f C", sMax);
+  footer->setCursor(BAR_X + BAR_W - 6 * strlen(buf) + 1, 13); footer->print(buf);
+
+  footer->setTextColor(RGB565_YELLOW, RGB565_BLACK);
+  snprintf(buf, sizeof(buf), "centre %.1f C", sCenter);
+  footer->setCursor(BAR_X, 25); footer->print(buf);
+  if (spotMode != SPOT_OFF) {
+    footer->setTextColor(SPOT_COLOUR, RGB565_BLACK);
+    snprintf(buf, sizeof(buf), "%s %.1f C", spotMode == SPOT_HOT ? "hot" : "cold", spotT);
+    footer->setCursor(BAR_X + BAR_W - 6 * strlen(buf) + 1, 25); footer->print(buf);
+  }
+}
+
+// The current (or frozen) frame to the SD card, as shown on screen, with the
+// readouts in a strip below it and in the PNG's Comment
 static void saveSnapshot() {
   static float t[SENS_W * SENS_H];      // display orientation
   for (int y = 0; y < SENS_H; y++)
     for (int x = 0; x < SENS_W; x++) t[y * SENS_W + x] = px(x, y);
-  savedNum = sdSave(imgBuf, IMG_W, IMG_H, t, SENS_W, SENS_H);
+  drawFooter();
+  char comment[128];
+  int n = snprintf(comment, sizeof(comment), "min %.1f C, max %.1f C, centre %.1f C", sMin, sMax, sCenter);
+  if (spotMode != SPOT_OFF)
+    snprintf(comment + n, sizeof(comment) - n, ", %s spot %.1f C at %.1f,%.1f",
+             spotMode == SPOT_HOT ? "hot" : "cold", spotT, spotX, spotY);
+  const SdSnapshot snap = {imgBuf, IMG_W, IMG_H, footer->getFramebuffer(), FOOT_H, t, SENS_W, SENS_H, comment};
+  savedNum = sdSave(snap);
   saveSeq++;
   char buf[16];
   if (savedNum >= 0) snprintf(buf, sizeof(buf), "saved %04d", savedNum);
@@ -551,6 +586,8 @@ void setup() {
 
   imgBuf = (uint16_t *)malloc(IMG_W * IMG_H * sizeof(uint16_t));
   if (!imgBuf) fatal("No RAM for image");
+  footer = new Arduino_Canvas(IMG_W, FOOT_H, nullptr);
+  if (!footer->begin(GFX_SKIP_OUTPUT_BEGIN)) fatal("No RAM for footer");
 
   Wire.setPins(I2C_SDA, I2C_SCL);
   Wire.begin();

@@ -38,12 +38,12 @@ A handheld thermal camera: Waveshare ESP32-C6-LCD-1.47 + Pimoroni MLX90640, show
 - 2026-10-16: One-button menu: long press (600 ms, fires while held) opens; short steps; long selects and closes; 6 s timeout. Items: Spot off, Hot spot, Cold spot (exclusive). Freeze stays on the short press outside the menu, not in the menu. Default spot: hot.
 - 2026-10-16: Wi-Fi as an open access point (not station mode) with a captive portal, so the live page opens as the sign-in page. The web server runs in its own task and only exchanges a snapshot and request flags with `loop()`; the browser renders the image from raw temperatures.
 - 2026-10-17: Wi-Fi can be switched off from the menu (the web task stops the AP). Spot mode and Wi-Fi persist in NVS via `Preferences`, versioned (`SETTINGS_VERSION`) so later firmware can migrate stored keys; freeze is not persisted.
-- 2026-10-17: Snapshots on the microSD card as IMG_nnnn.png (screen image) + .csv (32×24 °C) in /ircam, FAT32. PNG is deflated by miniz in the C6's ROM (no flash cost); its ~165 KB compressor is malloc'd per save, with stored (uncompressed) deflate blocks as the fallback when the heap can't spare it. Triggered by menu item Save (first in the menu) or the web page. The SD card and LCD share SPI2 but not a lock, so `loop()` holds our own recursive bus mutex except while reading the sensor, and the web task streams files in 2 KB chunks under it.
+- 2026-10-17: Snapshots on the microSD card as IMG_nnnn.png (screen image) + .csv (32×24 °C) in /ircam, FAT32. The PNG has a readout strip below the image (colour bar, min/max, centre, active spot) and the same values in a tEXt Comment. It is stored uncompressed (~86 KB): the ROM's miniz deflate needs ~165 KB of heap and didn't compress even when it got it. Triggered by menu item Save (first in the menu) or the web page. The SD card and LCD share SPI2 but not a lock, so `loop()` holds our own recursive bus mutex except while reading the sensor, and the web task streams files in 2 KB chunks under it.
 - 2026-10-16: Cold spot uses the same cyan as the hot spot (green was too dark on the panel). Only one spot is shown at a time (off / hot / cold), so both share one marker and one readout line.
 
 ## Current state
 
-Everything above works on the hardware and is committed, including SD snapshots (save from the menu and the web page, list, download, delete). Not yet measured: fps while a phone is watching.
+Everything above works on the hardware and is committed, including SD snapshots (save from the menu and the web page, list, download, delete). Snapshots include a readout strip and are stored as uncompressed PNG. Not yet measured: fps while a phone is watching.
 
 ## Open questions
 

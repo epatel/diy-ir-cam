@@ -20,9 +20,15 @@ void spiBusLock();
 void spiBusUnlock();
 
 bool sdBegin(int sck, int mosi);  // mount; after gfx->begin(). Retried by sdSave() if no card
-// Writes the next IMG_nnnn.png/.csv. rgb565 is w x h, temps are tw x th in
-// deg C, row-major. Returns the snapshot number, or -1 (no card, write error)
-int sdSave(const uint16_t *rgb565, int w, int h, const float *temps, int tw, int th);
+struct SdSnapshot {
+  const uint16_t *image; int w, h;    // RGB565, as on screen
+  const uint16_t *footer; int footerH;  // RGB565, w wide, stacked under the image in the PNG
+  const float *temps; int tw, th;     // deg C, row-major, for the CSV
+  const char *comment;                // PNG tEXt "Comment", or nullptr
+};
+// Writes the next IMG_nnnn.png/.csv. Returns the snapshot number, or -1 (no
+// card, write error)
+int sdSave(const SdSnapshot &s);
 
 // For the web task
 String sdListJson();          // [{"n":"IMG_0001.png","s":21000},...], oldest first

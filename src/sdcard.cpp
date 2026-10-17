@@ -78,10 +78,11 @@ bool sdBegin(int sck, int mosi) {
 static void putBE32(uint8_t *p, uint32_t v) { p[0] = v >> 24; p[1] = v >> 16; p[2] = v >> 8; p[3] = v; }
 
 // ---------- PNG writer ----------
-// Deflate comes from miniz in the C6's ROM (tdefl_*, mz_adler32, mz_crc32).
-// Its compressor needs ~165 KB, taken from the heap only while saving; if that
-// isn't free, the image is written as stored (uncompressed) deflate blocks
-// instead, which is still a valid PNG, just the size of a BMP.
+// Uncompressed: the zlib stream is stored deflate blocks, one per row, which
+// is a valid PNG about the size of a BMP (~86 KB). Real deflate (miniz in the
+// C6 ROM) needs a ~165 KB compressor, more than the heap can spare next to
+// Wi-Fi, and didn't shrink the image even when it got the memory. The ROM
+// still provides the checksums (mz_crc32, mz_adler32).
 
 struct PngOut {
   File *f;
@@ -98,9 +99,8 @@ static void writeChunk(File &f, const char *type, const uint8_t *data, size_t le
   ok = ok && f.write(hdr, 8) == 8 && (len == 0 || f.write(data, len) == len) && f.write(crc, 4) == 4;
 }
 
-// Compressed bytes in, IDAT chunks of up to 4 KB out
-static mz_bool pngPut(const void *data, int len, void *user) {
-  PngOut *o = (PngOut *)user;
+// zlib stream in, IDAT chunks of up to 4 KB out
+static void pngPut(PngOut *o, const void *data, int len) {
   const uint8_t *p = (const uint8_t *)data;
   while (len > 0 && o->ok) {
     const size_t k = min((size_t)len, sizeof(o->buf) - o->n);
@@ -108,11 +108,12 @@ static mz_bool pngPut(const void *data, int len, void *user) {
     o->n += k; p += k; len -= k;
     if (o->n == sizeof(o->buf)) { writeChunk(*o->f, "IDAT", o->buf, o->n, o->ok); o->n = 0; }
   }
-  return o->ok;
 }
 
-// 8-bit RGB PNG of an RGB565 image; every row uses the Sub filter
-static bool writePng(const char *path, const uint16_t *rgb565, int w, int h) {
+// 8-bit RGB PNG of the image with the footer below it (both RGB565, same
+// width), plus a tEXt Comment
+static bool writePng(const char *path, const SdSnapshot &s) {
+  const int w = s.w, h = s.h + s.footerH;
   File f = SD.open(path, FILE_WRITE);
   if (!f) return false;
   static const uint8_t SIG[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
@@ -125,21 +126,20 @@ static bool writePng(const char *path, const uint16_t *rgb565, int w, int h) {
   o.f = &f; o.n = 0;
   o.ok = f.write(SIG, sizeof(SIG)) == sizeof(SIG);
   writeChunk(f, "IHDR", ihdr, sizeof(ihdr), o.ok);
-
-  tdefl_compressor *z = (tdefl_compressor *)malloc(sizeof(tdefl_compressor));
-  const bool packed = z != nullptr;
-  uint32_t adler = 1;
-  if (z) {
-    tdefl_init(z, pngPut, &o, TDEFL_WRITE_ZLIB_HEADER | 32);   // 32 probes: quick, still small
-  } else {
-    static const uint8_t ZHDR[2] = {0x78, 0x01};
-    pngPut(ZHDR, 2, &o);
+  if (s.comment) {
+    static uint8_t text[256];
+    const size_t n = snprintf((char *)text, sizeof(text), "Comment%c%s", 0, s.comment);
+    writeChunk(f, "tEXt", text, min(n, sizeof(text) - 1), o.ok);
   }
+
+  static const uint8_t ZHDR[2] = {0x78, 0x01};   // zlib header, no compression
+  pngPut(&o, ZHDR, 2);
+  uint32_t adler = 1;
 
   const int rowLen = 1 + w * 3;
   uint8_t row[rowLen];
   for (int y = 0; o.ok && y < h; y++) {
-    const uint16_t *src = rgb565 + y * w;
+    const uint16_t *src = y < s.h ? s.image + y * w : s.footer + (y - s.h) * w;
     uint8_t *px = row + 1;
     for (int x = 0; x < w; x++) {
       const uint16_t c = src[x];
@@ -148,29 +148,20 @@ static bool writePng(const char *path, const uint16_t *rgb565, int w, int h) {
       px[x * 3 + 1] = (g << 2) | (g >> 4);
       px[x * 3 + 2] = (b << 3) | (b >> 2);
     }
-    row[0] = 1;                             // Sub: each byte minus the one a pixel to the left
-    for (int i = w * 3 - 1; i >= 3; i--) px[i] -= px[i - 3];
+    row[0] = 0;                             // PNG filter: none
 
-    const bool last = y == h - 1;
-    if (z) {
-      if (tdefl_compress_buffer(z, row, rowLen, last ? TDEFL_FINISH : TDEFL_NO_FLUSH) < 0) o.ok = false;
-    } else {
-      const uint8_t blk[5] = {(uint8_t)last, (uint8_t)rowLen, (uint8_t)(rowLen >> 8),
-                              (uint8_t)~rowLen, (uint8_t)(~rowLen >> 8)};
-      pngPut(blk, 5, &o);
-      pngPut(row, rowLen, &o);
-      adler = mz_adler32(adler, row, rowLen);
-    }
+    const bool last = y == h - 1;           // stored block header: final flag, length, ~length
+    const uint8_t blk[5] = {(uint8_t)last, (uint8_t)rowLen, (uint8_t)(rowLen >> 8),
+                            (uint8_t)~rowLen, (uint8_t)(~rowLen >> 8)};
+    pngPut(&o, blk, 5);
+    pngPut(&o, row, rowLen);
+    adler = mz_adler32(adler, row, rowLen);
   }
-  if (!z) {
-    uint8_t a[4];
-    putBE32(a, adler);
-    pngPut(a, 4, &o);
-  }
-  free(z);
+  uint8_t a[4];
+  putBE32(a, adler);
+  pngPut(&o, a, 4);
   if (o.n) writeChunk(f, "IDAT", o.buf, o.n, o.ok);
   writeChunk(f, "IEND", nullptr, 0, o.ok);
-  Serial.printf("PNG %s: %u bytes, %s\n", path, (unsigned)f.position(), packed ? "compressed" : "stored (no RAM for deflate)");
   f.close();
   return o.ok;
 }
@@ -192,16 +183,16 @@ static bool writeCsv(const char *path, const float *temps, int tw, int th) {
   return ok;
 }
 
-int sdSave(const uint16_t *rgb565, int w, int h, const float *temps, int tw, int th) {
+int sdSave(const SdSnapshot &s) {
   sdEnter();
   if (!mounted && busSck >= 0) sdBegin(busSck, busMosi);   // card inserted since boot
   int num = -1;
   if (mounted) {
     char path[32];
     snprintf(path, sizeof(path), "%s/IMG_%04d.png", DIR, nextNum);
-    bool ok = writePng(path, rgb565, w, h);
+    bool ok = writePng(path, s);
     snprintf(path, sizeof(path), "%s/IMG_%04d.csv", DIR, nextNum);
-    ok = ok && writeCsv(path, temps, tw, th);
+    ok = ok && writeCsv(path, s.temps, s.tw, s.th);
     if (ok) num = nextNum++;
     else mounted = false;                   // card removed or full; remount on the next save
   }
